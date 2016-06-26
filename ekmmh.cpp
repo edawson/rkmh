@@ -26,8 +26,8 @@ KSEQ_INIT(gzFile, gzread)
 int main(int argc, char** argv){
     char* ref_file;
     string read_file = "";
-    int kmer = 0;
-    int sketch_size = 0;
+    vector<int> kmer;
+    int sketch_size = -1;
 
     int c;
     if (argc < 2){
@@ -60,7 +60,7 @@ int main(int argc, char** argv){
                 read_file = optarg;
                 break;
             case 'k':
-                kmer = atoi(optarg);
+                kmer.push_back(atoi(optarg));
                 break;
             case '?':
             case 'h':
@@ -85,6 +85,7 @@ int main(int argc, char** argv){
     gzFile fp;
     kseq_t *seq;
     int l;
+
     fp = gzopen(ref_file, "r");
     seq = kseq_init(fp);
     // Read in reads, cluster, spit it back out
@@ -98,10 +99,32 @@ int main(int argc, char** argv){
 
     cerr << "Loaded " << name_to_seq.size() << " sequences." << endl;
 
-    sample_to_kmers = make_sample_to_kmers(name_to_seq, 12);
+    //sample_to_kmers = make_sample_to_kmers(name_to_seq, 12);
 
     map<string, string>::iterator itersk;
-    for (itersk =
+    for (itersk = name_to_seq.begin(); itersk != name_to_seq.end(); itersk++){
+       sample_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
+       //cerr << " Length hashes: " << sample_to_hashes[itersk->first].size() << endl;
+    }
+
+    cerr << "Processed " << sample_to_hashes.size() << " samples to MinHashes" << endl;
+
+    vector<struct Classification> matches;
+    matches.reserve(sample_to_hashes.size());
+    map<string, vector<int64_t> >::iterator mitersk;
+    int count = 0;
+    for (mitersk = sample_to_hashes.begin(); mitersk != sample_to_hashes.end(); mitersk++){
+        cerr << "Processed: " << count << " samples." << endl;
+        //struct Classification result = classify_and_count(mitersk->second, sample_to_hashes);
+        string result = classify(mitersk->second, sample_to_hashes); 
+        cerr  << result << endl;
+        //for (auto iii : mitersk->second){
+        //    cerr << iii << " ";
+        //}
+        count++;
+        //break;
+    }
+
     /*for (iter = sample_to_kmers.begin(); iter != sample_to_kmers.end(); iter++){
         cout << iter->first << endl;
         cout << (iter->second).size() << endl;

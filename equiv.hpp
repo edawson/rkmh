@@ -62,10 +62,13 @@ struct Classification{
 inline struct Classification classify_and_count(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
      //Parallel compare through the map would be really nice...
     int max_shared = -1;
-    Classification ret;
+    struct Classification ret;
+    ret.sample = "";
+    ret.shared_intersection = 0;
+    ret.total_union = 0;
     map<string, vector<int64_t> >::iterator iter;
     for (iter = ref_to_hashes.begin(); iter != ref_to_hashes.end(); iter++){
-         vector<int64_t> matches = hash_set_intersection(read_hashes, iter->second);
+         vector<int64_t> matches = hash_intersection(read_hashes, iter->second);
          if (matches.size() > max_shared){
             ret.sample = iter->first;
             ret.shared_intersection = matches.size();
@@ -82,7 +85,7 @@ inline string classify(vector<int64_t>& read_hashes, map<string, vector<int64_t>
     string ret = "";
     map<string, vector<int64_t> >::iterator iter;
     for (iter = ref_to_hashes.begin(); iter != ref_to_hashes.end(); iter++){
-         vector<int64_t> matches = hash_set_intersection(read_hashes, iter->second);
+         vector<int64_t> matches = hash_intersection(read_hashes, iter->second);
          if (matches.size() > max_shared){
             ret = iter->first;
             max_shared = matches.size();
