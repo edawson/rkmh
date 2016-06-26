@@ -1,0 +1,3 @@
+[submodule "mkmh"]
+	path = mkmh
+	url = https://github.com/edawson/mkmh.git
