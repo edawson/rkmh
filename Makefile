@@ -1,7 +1,7 @@
 CXX:=g++
-CXXFLAGS:= -std=c++11 -O3 -mtune=native
+CXXFLAGS:= -std=c++11 -O3 -mtune=native #-fopenmp
 LD_INC_FLAGS:= -Imkmh -I. -Imkmh/murmur3 -Ikseq
-LD_LIB_FLAGS:= -Lmkmh -lmkmh -lz
+LD_LIB_FLAGS:= -Lmkmh/murmur3 -Lmkmh -lmkmh -lz -lmurmur3
 
 
 ekmmh: ekmmh.cpp equiv.hpp
@@ -13,4 +13,4 @@ ekmmh: ekmmh.cpp equiv.hpp
 
 clean:
 	$(RM) *.o
-	$(RM) ekmmmh
+	$(RM) ekmmh

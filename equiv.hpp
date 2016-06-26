@@ -9,7 +9,7 @@
 
 using namespace std;
 using namespace mkmh;
-inline map<string, vector<string> > make_kmer_to_sample(map<string, vector<string>>& sample_to_kmers){
+inline map<string, vector<string> > make_kmer_to_samples(map<string, vector<string>>& sample_to_kmers){
     map<string, vector<string> > ret;
     map<string, vector<string> >::iterator sk_iter;
     for (sk_iter = sample_to_kmers.begin(); sk_iter != sample_to_kmers.end(); sk_iter++){
@@ -24,7 +24,7 @@ inline map<string, vector<string> > make_sample_to_kmers(map<string, string>& na
     map<string, vector<string> > ret;
 
     map<string, string>::iterator ns_iter;
-    for (ns_iter = name_to_sequence.begin(); ns_iter != name_to_sequence.begin(); ns_iter++){
+    for (ns_iter = name_to_sequence.begin(); ns_iter != name_to_sequence.end(); ns_iter++){
         ret[ns_iter->first] = kmerize(ns_iter->second, k);
     }
 

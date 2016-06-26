@@ -90,19 +90,23 @@ int main(int argc, char** argv){
     // Read in reads, cluster, spit it back out
     while ((l = kseq_read(seq)) >= 0) {
         name_to_seq[seq->name.s] = seq->seq.s;
-        cout << name_to_seq.size() << endl;
         //printf("name: %s\n", seq->name.s);
         //if (seq->comment.l) printf("comment: %s\n", seq->comment.s);
         //printf("seq: %s\n", seq->seq.s);
         //if (seq->qual.l) printf("qual: %s\n", seq->qual.s);
     } 
 
-    sample_to_kmers = make_sample_to_kmers(name_to_seq, 10);
-    map<string, vector<string> >::iterator iter;
-    for (iter = sample_to_kmers.begin(); iter != sample_to_kmers.end(); iter++){
+    cerr << "Loaded " << name_to_seq.size() << " sequences." << endl;
+
+    sample_to_kmers = make_sample_to_kmers(name_to_seq, 12);
+
+    map<string, string>::iterator itersk;
+    for (itersk =
+    /*for (iter = sample_to_kmers.begin(); iter != sample_to_kmers.end(); iter++){
         cout << iter->first << endl;
         cout << (iter->second).size() << endl;
-    }
+    }*/
+    //kmer_to_samples = make_kmer_to_samples(sample_to_kmers);
 
 
 
