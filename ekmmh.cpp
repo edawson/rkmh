@@ -25,7 +25,7 @@ KSEQ_INIT(gzFile, gzread)
 
 int main(int argc, char** argv){
     char* ref_file;
-    string read_file = "";
+    char* read_file;
     vector<int> kmer;
     int sketch_size = -1;
 
@@ -76,60 +76,111 @@ int main(int argc, char** argv){
 
         }
     }
-    map<string, vector<string> > kmer_to_samples;
-    map<string, vector<string> > sample_to_kmers;
-    map<int64_t, vector<string> > hash_to_samples;
-    map<string, vector<int64_t> > sample_to_hashes;
-    map<string, string> name_to_seq;
+
+
+    map<string, string> ref_to_seq;
+    map<string, vector<int64_t> > ref_to_hashes;
+    map<string, vector<string> > ref_to_kmers;
+
+    map<string, string> read_to_seq;
+    map<string, vector<int64_t> > read_to_hashes;
+    map<string, vector<string> > read_to_kmers;
     // Read in fastas
     gzFile fp;
     kseq_t *seq;
     int l;
 
-    fp = gzopen(ref_file, "r");
-    seq = kseq_init(fp);
-    // Read in reads, cluster, spit it back out
-    while ((l = kseq_read(seq)) >= 0) {
-        name_to_seq[seq->name.s] = seq->seq.s;
-        //printf("name: %s\n", seq->name.s);
-        //if (seq->comment.l) printf("comment: %s\n", seq->comment.s);
-        //printf("seq: %s\n", seq->seq.s);
-        //if (seq->qual.l) printf("qual: %s\n", seq->qual.s);
-    } 
+    if (!(strlen(ref_file) == 0)){
+        fp = gzopen(ref_file, "r");
+        seq = kseq_init(fp);
+        // Read in reads, cluster, spit it back out
+        while ((l = kseq_read(seq)) >= 0) {
+            ref_to_seq[seq->name.s] = seq->seq.s;
+        } 
 
-    cerr << "Loaded " << name_to_seq.size() << " sequences." << endl;
-
-    //sample_to_kmers = make_sample_to_kmers(name_to_seq, 12);
-
-    map<string, string>::iterator itersk;
-    for (itersk = name_to_seq.begin(); itersk != name_to_seq.end(); itersk++){
-       sample_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
-       //cerr << " Length hashes: " << sample_to_hashes[itersk->first].size() << endl;
+        cerr << "Loaded " << ref_to_seq.size() << " sequences." << endl;
+    }
+    else{
+        cerr << "Please provide a fasta file containing references." << endl;
+        exit(1);
     }
 
-    cerr << "Processed " << sample_to_hashes.size() << " samples to MinHashes" << endl;
+    if (!(strlen(read_file) == 0)){
+        fp = gzopen(read_file, "r");
+        seq = kseq_init(fp);
+        // Read in reads, cluster, spit it back out
+        while ((l = kseq_read(seq)) >= 0) {
+            read_to_seq[seq->name.s] = seq->seq.s;
+        }
 
-    vector<struct Classification> matches;
-    matches.reserve(sample_to_hashes.size());
-    map<string, vector<int64_t> >::iterator mitersk;
-    int count = 0;
-    for (mitersk = sample_to_hashes.begin(); mitersk != sample_to_hashes.end(); mitersk++){
-        cerr << "Processed: " << count << " samples." << endl;
-        //struct Classification result = classify_and_count(mitersk->second, sample_to_hashes);
-        string result = classify(mitersk->second, sample_to_hashes); 
-        cerr  << result << endl;
-        //for (auto iii : mitersk->second){
-        //    cerr << iii << " ";
-        //}
-        count++;
-        //break;
+        cerr << "Loaded " << read_to_seq.size() << " sequences." << endl;
+    }
+    else{
+        cerr << "Please provide a read file containing query sequences." << endl;
+        exit(1);
     }
 
-    /*for (iter = sample_to_kmers.begin(); iter != sample_to_kmers.end(); iter++){
-        cout << iter->first << endl;
-        cout << (iter->second).size() << endl;
-    }*/
-    //kmer_to_samples = make_kmer_to_samples(sample_to_kmers);
+
+    if (sketch_size > 0){
+
+        map<string, string>::iterator itersk;
+        for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
+            ref_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
+            cerr << ref_to_hashes[itersk->first][1] << endl;
+        }
+
+        cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
+
+        for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
+            read_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
+            cerr << read_to_hashes[itersk->first][1] << endl;
+        }
+
+        cerr << "Processed " << read_to_hashes.size() << " reads to MinHashes" << endl;
+        
+        //TODO remove me!!
+
+        map<string, vector<int64_t> >::iterator mitersk;
+        int count = 0;
+
+        for (mitersk = read_to_hashes.begin(); mitersk != read_to_hashes.end(); mitersk++){
+            //struct Classification result = classify_and_count(mitersk->second, sample_to_hashes);
+            tuple<string, int, int> result = classify_and_count(mitersk->second, ref_to_hashes);
+            //string result = classify(mitersk->second, ref_to_hashes); 
+            //cerr << result << endl;
+            cerr  << "Sample: " << mitersk->first << "\t"
+                << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
+
+            count++;
+
+            cerr << "Processed: " << count << " samples." << endl;
+        }
+
+    }
+
+    else{
+        cerr << "Performing direct kmer-based comparison." << endl;
+        map<string, string>::iterator itersk;
+        for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
+            ref_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
+        }
+
+        cerr << "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
+
+        for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
+            read_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
+        }
+
+        cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
+
+
+        map<string, vector<string> >::iterator kitersk;
+        for (kitersk = read_to_kmers.begin(); kitersk != read_to_kmers.end(); kitersk++){
+            tuple<string, int, int> result = kmer_classify( kitersk->second, ref_to_kmers);
+        }
+
+
+    }
 
 
 
@@ -137,12 +188,6 @@ int main(int argc, char** argv){
 
 
 
-    // Kmerize sample to make kmer to samples and sample to kmers
 
-    // For read in readset:
-    // kmerize read
-    // look up kmers in kmer_to_sample
-    // if a sufficient number match and a dominant equiv class forms then
-    // return the sample name.
     return 1;
 }

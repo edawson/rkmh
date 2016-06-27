@@ -4,6 +4,7 @@
 #include <string>
 #include "mkmh.hpp"
 #include <vector>
+#include <tuple>
 #include <cstdint>
 #include <map>
 
@@ -58,10 +59,10 @@ struct Classification{
     int shared_intersection = 0;
     int total_union = 0;
 };
-
+/*
 inline struct Classification classify_and_count(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
      //Parallel compare through the map would be really nice...
-    int max_shared = -1;
+    int max_shared = 0;
     struct Classification ret;
     ret.sample = "";
     ret.shared_intersection = 0;
@@ -77,11 +78,51 @@ inline struct Classification classify_and_count(vector<int64_t>& read_hashes, ma
     }
     return ret;   
 };
+*/
+inline tuple<string, int, int> classify_and_count(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
+     //Parallel compare through the map would be really nice...
+    int max_shared = 0;
+    string sample = "";
+    int shared_intersection = 0;
+    int total_union = 0;
+    map<string, vector<int64_t> >::iterator iter;
+    for (iter = ref_to_hashes.begin(); iter != ref_to_hashes.end(); iter++){
+         vector<int64_t> matches = hash_intersection(read_hashes, iter->second);
+         cerr << "MATCHES: " << matches.size() << endl;
+         if (matches.size() > max_shared){
+            max_shared = matches.size();
+            sample = iter->first;
+            shared_intersection = matches.size();
+            total_union = hash_set_union(read_hashes, iter->second).size();
+
+            cerr << "Matches now: " << matches.size() << " " << sample << endl;
+         }
+    }
+    return std::make_tuple(sample, shared_intersection, total_union);   
+};
+
+inline tuple<string, int, int> kmer_classify(vector<string>& readmers, map<string, vector<string> >& ref_mers){
+    int max_shared = 0;
+    string sample = "";
+    int inter = 0;
+    int uni = 0;
+    map<string, vector<string> >::iterator iter;
+    for (iter = ref_mers.begin(); iter != ref_mers.end(); iter++){
+        vector<string> matches = kmer_intersection(readmers, iter->second);
+        cerr << "Matches: " << matches.size() << endl;
+        if (matches.size() >= max_shared){
+            max_shared = matches.size();
+            inter = matches.size();
+            sample = iter->first;
+        }
+    }
+     return std::make_tuple(sample, inter, uni);
+};
 
 inline string classify(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
 
     //Parallel compare through the map would be really nice...
-    int max_shared = -1;
+    int max_shared = 0;
     string ret = "";
     map<string, vector<int64_t> >::iterator iter;
     for (iter = ref_to_hashes.begin(); iter != ref_to_hashes.end(); iter++){
