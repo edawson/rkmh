@@ -88,14 +88,14 @@ inline tuple<string, int, int> classify_and_count(vector<int64_t>& read_hashes, 
     map<string, vector<int64_t> >::iterator iter;
     for (iter = ref_to_hashes.begin(); iter != ref_to_hashes.end(); iter++){
          vector<int64_t> matches = hash_intersection(read_hashes, iter->second);
-         cerr << "MATCHES: " << matches.size() << endl;
+         //cerr << "MATCHES: " << matches.size() << endl;
          if (matches.size() > max_shared){
             max_shared = matches.size();
             sample = iter->first;
             shared_intersection = matches.size();
             total_union = hash_set_union(read_hashes, iter->second).size();
 
-            cerr << "Matches now: " << matches.size() << " " << sample << endl;
+            //cerr << "Matches now: " << matches.size() << " " << sample << endl;
          }
     }
     return std::make_tuple(sample, shared_intersection, total_union);   

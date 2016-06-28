@@ -126,14 +126,16 @@ int main(int argc, char** argv){
         map<string, string>::iterator itersk;
         for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
             ref_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
-            cerr << ref_to_hashes[itersk->first][1] << endl;
+            //cerr << multi_kmerize(itersk->second, kmer)[0];
+            //cerr << ref_to_hashes[itersk->first][1] << endl;
         }
 
         cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
 
         for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
             read_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
-            cerr << read_to_hashes[itersk->first][1] << endl;
+            //cerr << multi_kmerize(itersk->second, kmer)[0];
+            //cerr << read_to_hashes[itersk->first][1] << endl;
         }
 
         cerr << "Processed " << read_to_hashes.size() << " reads to MinHashes" << endl;
