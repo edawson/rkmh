@@ -93,7 +93,7 @@ inline tuple<string, int, int> classify_and_count(vector<int64_t>& read_hashes, 
             max_shared = matches.size();
             sample = iter->first;
             shared_intersection = matches.size();
-            total_union = hash_set_union(read_hashes, iter->second).size();
+            total_union = read_hashes.size(); //hash_union(read_hashes, iter->second).size();
 
             //cerr << "Matches now: " << matches.size() << " " << sample << endl;
          }
@@ -109,7 +109,7 @@ inline tuple<string, int, int> kmer_classify(vector<string>& readmers, map<strin
     map<string, vector<string> >::iterator iter;
     for (iter = ref_mers.begin(); iter != ref_mers.end(); iter++){
         vector<string> matches = kmer_intersection(readmers, iter->second);
-        cerr << "Matches: " << matches.size() << endl;
+        //cerr << "Matches: " << matches.size() << endl;
         if (matches.size() >= max_shared){
             max_shared = matches.size();
             inter = matches.size();

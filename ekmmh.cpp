@@ -95,7 +95,7 @@ int main(int argc, char** argv){
         seq = kseq_init(fp);
         // Read in reads, cluster, spit it back out
         while ((l = kseq_read(seq)) >= 0) {
-            ref_to_seq[seq->name.s] = seq->seq.s;
+            ref_to_seq[seq->name.s] = to_upper(seq->seq.s);
         } 
 
         cerr << "Loaded " << ref_to_seq.size() << " sequences." << endl;
@@ -110,7 +110,7 @@ int main(int argc, char** argv){
         seq = kseq_init(fp);
         // Read in reads, cluster, spit it back out
         while ((l = kseq_read(seq)) >= 0) {
-            read_to_seq[seq->name.s] = seq->seq.s;
+            read_to_seq[seq->name.s] = to_upper(seq->seq.s);
         }
 
         cerr << "Loaded " << read_to_seq.size() << " sequences." << endl;
@@ -122,20 +122,27 @@ int main(int argc, char** argv){
 
 
     if (sketch_size > 0){
-
+        cerr << "Making reference sketches..." << endl;
         map<string, string>::iterator itersk;
         for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
             ref_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
             //cerr << multi_kmerize(itersk->second, kmer)[0];
-            //cerr << ref_to_hashes[itersk->first][1] << endl;
+            //cout << ref_to_hashes[itersk->first][1] << endl;
         }
 
         cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
 
         for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
             read_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
+
+            tuple<string, int, int> result = classify_and_count(read_to_hashes[itersk->first], ref_to_hashes);
+            cout  << "Sample: " << itersk->first << "\t"
+                << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
+
+            //string result = classify(read_to_hashes[itersk->first], ref_to_hashes);
+            //cerr << result << endl;
             //cerr << multi_kmerize(itersk->second, kmer)[0];
-            //cerr << read_to_hashes[itersk->first][1] << endl;
+            //cout << read_to_hashes[itersk->first][1] << endl;
         }
 
         cerr << "Processed " << read_to_hashes.size() << " reads to MinHashes" << endl;
@@ -144,7 +151,7 @@ int main(int argc, char** argv){
 
         map<string, vector<int64_t> >::iterator mitersk;
         int count = 0;
-
+/*
         for (mitersk = read_to_hashes.begin(); mitersk != read_to_hashes.end(); mitersk++){
             //struct Classification result = classify_and_count(mitersk->second, sample_to_hashes);
             tuple<string, int, int> result = classify_and_count(mitersk->second, ref_to_hashes);
@@ -157,7 +164,7 @@ int main(int argc, char** argv){
 
             cerr << "Processed: " << count << " samples." << endl;
         }
-
+*/
     }
 
     else{
