@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdint>
 #include <string>
+#include <sstream>
 #include <zlib.h>
 #include <omp.h>
 #include <getopt.h>
@@ -142,68 +143,82 @@ int main(int argc, char** argv){
 
         cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
 
-        for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
+        vector<pair<string, string > > read_seq(read_to_seq.begin(), read_to_seq.end());
+
+        #pragma omp parallel for
+        for (int i = 0; i < read_seq.size(); i++){
+            stringstream outre;
+            vector<int64_t> hashes = minhash_64(read_seq[i].second, kmer, sketch_size, true);
+            tuple<string, int, int> result;
+            result = classify_and_count(hashes, ref_to_hashes);
+            //#pragma omp critical
+            outre  << "Sample: " << read_seq[i].first << "\t" << "Result: " << 
+                std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;   
+            cout << outre.str();
+ 
+        }
+
+        /*for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
             read_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
+            tuple<string, int, int> result;
+            result = classify_and_count(read_to_hashes[itersk->first], ref_to_hashes);
+            cout  << "Sample: " << itersk->first << "\t" << "Result: " << 
+                std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;   
+        //string result = classify(read_to_hashes[itersk->first], ref_to_hashes);
+        //cerr << result << endl;
+        //cerr << multi_kmerize(itersk->second, kmer)[0];
+        //cout << read_to_hashes[itersk->first][1] << endl;
+    }
+    */
 
-            tuple<string, int, int> result = classify_and_count(read_to_hashes[itersk->first], ref_to_hashes);
-            cout  << "Sample: " << itersk->first << "\t"
-                << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
+    cerr << "Processed " << read_to_hashes.size() << " reads to MinHashes" << endl;
 
-            //string result = classify(read_to_hashes[itersk->first], ref_to_hashes);
-            //cerr << result << endl;
-            //cerr << multi_kmerize(itersk->second, kmer)[0];
-            //cout << read_to_hashes[itersk->first][1] << endl;
-        }
+    //TODO remove me!!
 
-        cerr << "Processed " << read_to_hashes.size() << " reads to MinHashes" << endl;
-        
-        //TODO remove me!!
+    //map<string, vector<int64_t> >::iterator mitersk;
+    //int count = 0;
+    /*
+       for (mitersk = read_to_hashes.begin(); mitersk != read_to_hashes.end(); mitersk++){
+    //struct Classification result = classify_and_count(mitersk->second, sample_to_hashes);
+    tuple<string, int, int> result = classify_and_count(mitersk->second, ref_to_hashes);
+    //string result = classify(mitersk->second, ref_to_hashes); 
+    //cerr << result << endl;
+    cerr  << "Sample: " << mitersk->first << "\t"
+    << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
 
-        map<string, vector<int64_t> >::iterator mitersk;
-        int count = 0;
-/*
-        for (mitersk = read_to_hashes.begin(); mitersk != read_to_hashes.end(); mitersk++){
-            //struct Classification result = classify_and_count(mitersk->second, sample_to_hashes);
-            tuple<string, int, int> result = classify_and_count(mitersk->second, ref_to_hashes);
-            //string result = classify(mitersk->second, ref_to_hashes); 
-            //cerr << result << endl;
-            cerr  << "Sample: " << mitersk->first << "\t"
-                << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
+    count++;
 
-            count++;
+    cerr << "Processed: " << count << " samples." << endl;
+    }
+    */
+}
 
-            cerr << "Processed: " << count << " samples." << endl;
-        }
-*/
+else{
+    cerr << "Performing direct kmer-based comparison." << endl;
+    map<string, string>::iterator itersk;
+    for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
+        ref_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
+
+        std::sort(ref_to_kmers[itersk->first].begin(), ref_to_kmers[itersk->first].end());
     }
 
-    else{
-        cerr << "Performing direct kmer-based comparison." << endl;
-        map<string, string>::iterator itersk;
-        for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
-            ref_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
+    cerr << "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
 
-            std::sort(ref_to_kmers[itersk->first].begin(), ref_to_kmers[itersk->first].end());
-        }
+    for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
+        read_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
+        std::sort(read_to_kmers[itersk->first].begin(), read_to_kmers[itersk->first].end());
 
-        cerr << "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
-
-        for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
-            read_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
-            std::sort(read_to_kmers[itersk->first].begin(), read_to_kmers[itersk->first].end());
-
-            tuple<string, int, int> result = kmer_classify(read_to_kmers[itersk->first], ref_to_kmers);
-            cout  << "Sample: " << itersk->first << "\t"
-                << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
-
-
-        }
-
-        cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
+        tuple<string, int, int> result = kmer_classify(read_to_kmers[itersk->first], ref_to_kmers);
+        cout  << "Sample: " << itersk->first << "\t"
+            << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
 
 
     }
 
+    cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
+
+
+}
 
 
 
@@ -211,5 +226,6 @@ int main(int argc, char** argv){
 
 
 
-    return 1;
+
+return 1;
 }

@@ -2,11 +2,13 @@
 #define EQUIV_D
 
 #include <string>
-#include "mkmh.hpp"
 #include <vector>
 #include <tuple>
 #include <cstdint>
 #include <map>
+#include <omp.h>
+#include "mkmh.hpp"
+
 
 using namespace std;
 using namespace mkmh;
@@ -100,6 +102,33 @@ inline tuple<string, int, int> classify_and_count(vector<int64_t>& read_hashes, 
     }
     return std::make_tuple(sample, shared_intersection, total_union);   
 };
+
+
+inline tuple<string, int, int> p_classify_and_count(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
+     //Parallel compare through the map would be really nice...
+    int max_shared = 0;
+    string sample = "";
+    int shared_intersection = 0;
+    int total_union = 0;
+    vector<pair<string, vector<int64_t> > > ref_pairs(ref_to_hashes.begin(), ref_to_hashes.end());
+    #pragma omp parallel for
+    for (int i = 0; i < ref_pairs.size(); i++){
+         vector<int64_t> matches = hash_intersection(read_hashes, ref_pairs[i].second);
+         #pragma omp critical
+         {
+         if (matches.size() > max_shared){
+            max_shared = matches.size();
+            sample = ref_pairs[i].first;
+            shared_intersection = matches.size();
+            total_union = read_hashes.size(); //hash_union(read_hashes, iter->second).size();
+         }
+         }
+    }
+    return std::make_tuple(sample, shared_intersection, total_union);   
+};
+
+
+
 
 inline tuple<string, int, int> kmer_classify(vector<string>& readmers, map<string, vector<string> >& ref_mers){
     int max_shared = 0;

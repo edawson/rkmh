@@ -12,7 +12,7 @@ mkmh/libmkmh.a:
 
 #equiv.hpp:
 
-.PHONY: clean clobber
+.PHONY: clean clobber lib
 
 clean:
 	$(RM) *.o
