@@ -171,7 +171,7 @@ int main(int argc, char** argv){
     }
     */
 
-    cerr << "Processed " << read_to_hashes.size() << " reads to MinHashes" << endl;
+    //cerr << "Processed " << read_to_hashes.size() << " reads to MinHashes" << endl;
 
     //TODO remove me!!
 
