@@ -114,6 +114,7 @@ inline tuple<string, int, int> kmer_classify(vector<string>& readmers, map<strin
             max_shared = matches.size();
             inter = matches.size();
             sample = iter->first;
+            uni = readmers.size();
         }
     }
      return std::make_tuple(sample, inter, uni);

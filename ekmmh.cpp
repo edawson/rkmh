@@ -1,13 +1,15 @@
 #include <iostream>
+#include <algorithm>
 #include <vector>
 #include <cstdint>
 #include <string>
 #include <zlib.h>
-#include "kseq.hpp"
+#include <omp.h>
+#include <getopt.h>
 #include <map>
 #include "mkmh.hpp"
+#include "kseq.hpp"
 #include "equiv.hpp"
-#include <getopt.h>
 
 KSEQ_INIT(gzFile, gzread)
 
@@ -19,7 +21,8 @@ KSEQ_INIT(gzFile, gzread)
             << "--reads/-r   <READFILE>" << endl
             << "--fasta/-f   <FASTAFILE>" << endl
             << "--kmer/-k    <KMERSIZE>" << endl
-            << "--minhash/-h <HASHSIZE>" << endl;
+            << "--minhash/-h <HASHSIZE>" << endl
+            << "--threads/-t <THREADS>" << endl;
     }
 
 
@@ -28,6 +31,7 @@ int main(int argc, char** argv){
     char* read_file;
     vector<int> kmer;
     int sketch_size = -1;
+    int threads = 1;
 
     int c;
     if (argc < 2){
@@ -43,16 +47,20 @@ int main(int argc, char** argv){
             {"reads", required_argument, 0, 'r'},
             {"fasta", required_argument, 0, 'f'},
             {"minhash", required_argument, 0, 'm'},
+            {"threads", required_argument, 0, 't'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hm:k:r:f:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hm:k:r:f:t:", long_options, &option_index);
         if (c == -1){
             break;
         }
 
         switch (c){
+            case 't':
+                threads = atoi(optarg);
+                break;
             case 'f':
                 ref_file = optarg;
                 break;
@@ -85,6 +93,8 @@ int main(int argc, char** argv){
     map<string, string> read_to_seq;
     map<string, vector<int64_t> > read_to_hashes;
     map<string, vector<string> > read_to_kmers;
+
+    omp_set_num_threads(threads);
     // Read in fastas
     gzFile fp;
     kseq_t *seq;
@@ -172,21 +182,24 @@ int main(int argc, char** argv){
         map<string, string>::iterator itersk;
         for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
             ref_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
+
+            std::sort(ref_to_kmers[itersk->first].begin(), ref_to_kmers[itersk->first].end());
         }
 
         cerr << "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
 
         for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
             read_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
+            std::sort(read_to_kmers[itersk->first].begin(), read_to_kmers[itersk->first].end());
+
+            tuple<string, int, int> result = kmer_classify(read_to_kmers[itersk->first], ref_to_kmers);
+            cout  << "Sample: " << itersk->first << "\t"
+                << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
+
+
         }
 
         cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
-
-
-        map<string, vector<string> >::iterator kitersk;
-        for (kitersk = read_to_kmers.begin(); kitersk != read_to_kmers.end(); kitersk++){
-            tuple<string, int, int> result = kmer_classify( kitersk->second, ref_to_kmers);
-        }
 
 
     }
