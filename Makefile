@@ -4,7 +4,7 @@ LD_INC_FLAGS:= -Imkmh -I. -Imkmh/murmur3 -Ikseq
 LD_LIB_FLAGS:= -Lmkmh/murmur3 -Lmkmh -lmkmh -lz -lmurmur3
 
 
-ekmmh: ekmmh.cpp equiv.hpp mkmh/libmkmh.a
+rkmh: rkmh.cpp equiv.hpp mkmh/libmkmh.a
 	$(CXX) $(CXXFLAGS) -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
 mkmh/libmkmh.a:
@@ -16,4 +16,4 @@ mkmh/libmkmh.a:
 
 clean:
 	$(RM) *.o
-	$(RM) ekmmh
+	$(RM) rkmh
