@@ -30,6 +30,8 @@ KSEQ_INIT(gzFile, gzread)
 int main(int argc, char** argv){
     char* ref_file;
     char* read_file;
+    vector<char*> ref_files;
+    vector<char*> read_files;
     vector<int> kmer;
     int sketch_size = -1;
     int threads = 1;
@@ -63,10 +65,12 @@ int main(int argc, char** argv){
                 threads = atoi(optarg);
                 break;
             case 'f':
-                ref_file = optarg;
+                //ref_file = optarg;
+                ref_files.push_back(optarg);
                 break;
             case 'r':
-                read_file = optarg;
+                //read_file = optarg;
+                read_files.push_back(optarg);
                 break;
             case 'k':
                 kmer.push_back(atoi(optarg));
@@ -101,13 +105,16 @@ int main(int argc, char** argv){
     kseq_t *seq;
     int l;
 
-    if (!(strlen(ref_file) == 0)){
-        fp = gzopen(ref_file, "r");
-        seq = kseq_init(fp);
+    //if (!(strlen(ref_file) == 0)){
+    if (ref_files.size() > 0){
+        for (auto f : ref_files){
+            fp = gzopen(f, "r");
+            seq = kseq_init(fp);
         // Read in reads, cluster, spit it back out
-        while ((l = kseq_read(seq)) >= 0) {
-            ref_to_seq[seq->name.s] = to_upper(seq->seq.s);
-        } 
+            while ((l = kseq_read(seq)) >= 0) {
+                ref_to_seq[seq->name.s] = to_upper(seq->seq.s);
+            } 
+        }
 
         cerr << "Loaded " << ref_to_seq.size() << " sequences." << endl;
     }
@@ -116,12 +123,15 @@ int main(int argc, char** argv){
         exit(1);
     }
 
-    if (!(strlen(read_file) == 0)){
-        fp = gzopen(read_file, "r");
+    //if (!(strlen(read_file) == 0)){
+    if (read_files.size() > 0){
+        for (auto f : read_files){
+        fp = gzopen(f, "r");
         seq = kseq_init(fp);
         // Read in reads, cluster, spit it back out
         while ((l = kseq_read(seq)) >= 0) {
             read_to_seq[seq->name.s] = to_upper(seq->seq.s);
+        }
         }
 
         cerr << "Loaded " << read_to_seq.size() << " sequences." << endl;
