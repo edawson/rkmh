@@ -105,14 +105,14 @@ int main(int argc, char** argv){
     kseq_t *seq;
     int l;
 
-    //if (!(strlen(ref_file) == 0)){
     if (ref_files.size() > 0){
         for (auto f : ref_files){
             fp = gzopen(f, "r");
             seq = kseq_init(fp);
-        // Read in reads, cluster, spit it back out
+            // Read in reads, cluster, spit it back out
             while ((l = kseq_read(seq)) >= 0) {
                 ref_to_seq[seq->name.s] = to_upper(seq->seq.s);
+                //ref_seq.push_back(std::make_pair(seq->name.s, to_upper(seq->seq.s)));
             } 
         }
 
@@ -123,15 +123,14 @@ int main(int argc, char** argv){
         exit(1);
     }
 
-    //if (!(strlen(read_file) == 0)){
     if (read_files.size() > 0){
         for (auto f : read_files){
-        fp = gzopen(f, "r");
-        seq = kseq_init(fp);
-        // Read in reads, cluster, spit it back out
-        while ((l = kseq_read(seq)) >= 0) {
-            read_to_seq[seq->name.s] = to_upper(seq->seq.s);
-        }
+            fp = gzopen(f, "r");
+            seq = kseq_init(fp);
+            // Read in reads, cluster, spit it back out
+            while ((l = kseq_read(seq)) >= 0) {
+                read_to_seq[seq->name.s] = to_upper(seq->seq.s);
+            }
         }
 
         cerr << "Loaded " << read_to_seq.size() << " sequences." << endl;
@@ -144,13 +143,12 @@ int main(int argc, char** argv){
 
     if (sketch_size > 0){
         cerr << "Making reference sketches..." << endl;
-        map<string, string>::iterator itersk;
-        for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
-            ref_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
-            //cerr << multi_kmerize(itersk->second, kmer)[0];
-            //cout << ref_to_hashes[itersk->first][1] << endl;
-        }
 
+        vector<pair<string, string > > ref_seq(ref_to_seq.begin(), ref_to_seq.end());
+        #pragma omp parallel for
+        for (int i = 0; i < ref_seq.size(); i++){
+            ref_to_hashes[ref_seq[i].first] = minhash_64(ref_seq[i].second, kmer, sketch_size, true);
+        }
         cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
 
         vector<pair<string, string > > read_seq(read_to_seq.begin(), read_to_seq.end());
@@ -165,70 +163,38 @@ int main(int argc, char** argv){
             outre  << "Sample: " << read_seq[i].first << "\t" << "Result: " << 
                 std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;   
             cout << outre.str();
- 
+
         }
 
-        /*for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
-            read_to_hashes[itersk->first] = minhash_64(itersk->second, kmer, sketch_size, true);
-            tuple<string, int, int> result;
-            result = classify_and_count(read_to_hashes[itersk->first], ref_to_hashes);
-            cout  << "Sample: " << itersk->first << "\t" << "Result: " << 
-                std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;   
-        //string result = classify(read_to_hashes[itersk->first], ref_to_hashes);
-        //cerr << result << endl;
-        //cerr << multi_kmerize(itersk->second, kmer)[0];
-        //cout << read_to_hashes[itersk->first][1] << endl;
-    }
-    */
-
-    //cerr << "Processed " << read_to_hashes.size() << " reads to MinHashes" << endl;
-
-    //TODO remove me!!
-
-    //map<string, vector<int64_t> >::iterator mitersk;
-    //int count = 0;
-    /*
-       for (mitersk = read_to_hashes.begin(); mitersk != read_to_hashes.end(); mitersk++){
-    //struct Classification result = classify_and_count(mitersk->second, sample_to_hashes);
-    tuple<string, int, int> result = classify_and_count(mitersk->second, ref_to_hashes);
-    //string result = classify(mitersk->second, ref_to_hashes); 
-    //cerr << result << endl;
-    cerr  << "Sample: " << mitersk->first << "\t"
-    << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
-
-    count++;
-
-    cerr << "Processed: " << count << " samples." << endl;
-    }
-    */
-}
-
-else{
-    cerr << "Performing direct kmer-based comparison." << endl;
-    map<string, string>::iterator itersk;
-    for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
-        ref_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
-
-        std::sort(ref_to_kmers[itersk->first].begin(), ref_to_kmers[itersk->first].end());
     }
 
-    cerr << "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
+    else{
+        cerr << "Performing direct kmer-based comparison." << endl;
+        map<string, string>::iterator itersk;
+        for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
+            ref_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
 
-    for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
-        read_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
-        std::sort(read_to_kmers[itersk->first].begin(), read_to_kmers[itersk->first].end());
+            std::sort(ref_to_kmers[itersk->first].begin(), ref_to_kmers[itersk->first].end());
+        }
 
-        tuple<string, int, int> result = kmer_classify(read_to_kmers[itersk->first], ref_to_kmers);
-        cout  << "Sample: " << itersk->first << "\t"
-            << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
+        cerr << "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
+
+        for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
+            read_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
+            std::sort(read_to_kmers[itersk->first].begin(), read_to_kmers[itersk->first].end());
+
+            tuple<string, int, int> result = kmer_classify(read_to_kmers[itersk->first], ref_to_kmers);
+            cout  << "Sample: " << itersk->first << "\t"
+                << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
+
+
+        }
+
+        cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
 
 
     }
 
-    cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
-
-
-}
 
 
 
@@ -236,6 +202,5 @@ else{
 
 
 
-
-return 1;
+    return 1;
 }
