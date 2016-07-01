@@ -116,24 +116,27 @@ int main(int argc, char** argv){
             } 
         }
 
-        cerr << "Loaded " << ref_to_seq.size() << " sequences." << endl;
+        cerr << "Loaded " << ref_to_seq.size() << " reference sequences." << endl;
     }
     else{
         cerr << "Please provide a fasta file containing references." << endl;
         exit(1);
     }
 
+
+    vector<pair<string, string > > read_seq;
     if (read_files.size() > 0){
         for (auto f : read_files){
             fp = gzopen(f, "r");
             seq = kseq_init(fp);
             // Read in reads, cluster, spit it back out
             while ((l = kseq_read(seq)) >= 0) {
-                read_to_seq[seq->name.s] = to_upper(seq->seq.s);
+                //read_to_seq[seq->name.s] = to_upper(seq->seq.s);
+                read_seq.push_back(make_pair(seq->name.s, seq->seq.s));
             }
         }
 
-        cerr << "Loaded " << read_to_seq.size() << " sequences." << endl;
+        cerr << "Loaded " << read_seq.size() << " reads." << endl;
     }
     else{
         cerr << "Please provide a read file containing query sequences." << endl;
@@ -151,11 +154,12 @@ int main(int argc, char** argv){
         }
         cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
 
-        vector<pair<string, string > > read_seq(read_to_seq.begin(), read_to_seq.end());
+        //vector<pair<string, string > > read_seq(read_to_seq.begin(), read_to_seq.end());
 
         #pragma omp parallel for
         for (int i = 0; i < read_seq.size(); i++){
             stringstream outre;
+            //vector<int64_t> hashes = minhash_64(read_seq[i].second, kmer, sketch_size, true);
             vector<int64_t> hashes = minhash_64(read_seq[i].second, kmer, sketch_size, true);
             tuple<string, int, int> result;
             result = classify_and_count(hashes, ref_to_hashes);
