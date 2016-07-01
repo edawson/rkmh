@@ -190,7 +190,7 @@ int main(int argc, char** argv){
 
         }
 
-        cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
+        //cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
 
 
     }
