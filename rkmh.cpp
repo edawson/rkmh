@@ -23,9 +23,10 @@ KSEQ_INIT(gzFile, gzread)
             << "--reads/-r   <READFILE>" << endl
             << "--fasta/-f   <FASTAFILE>" << endl
             << "--kmer/-k    <KMERSIZE>" << endl
-            << "--minhash/-h <HASHSIZE>" << endl
+            << "--minhash/-m <HASHSIZE>" << endl
             << "--threads/-t <THREADS>" << endl
-            << "--min-kmer-occurence/-M <MINOCCURENCE>" << endl;
+            << "--min-kmer-occurence/-D <MINOCCURENCE>" << endl
+            << "--min-matches/-S <MINMATCHES>" << endl;
     }
 
 
@@ -38,6 +39,23 @@ int main(int argc, char** argv){
     int sketch_size = -1;
     int threads = 1;
     int min_kmer_occ = 0;
+    int min_matches = -1;
+
+    stringstream errtre;
+    map<string, string> ref_to_seq;
+    map<string, vector<int64_t> > ref_to_hashes;
+    map<string, vector<string> > ref_to_kmers;
+
+    map<string, string> read_to_seq;
+    map<string, vector<int64_t> > read_to_hashes;
+    map<string, vector<string> > read_to_kmers;
+
+    unordered_map<string, int> kmer_to_depth;
+    unordered_map<int64_t, int> hash_to_depth;
+    hash_to_depth.reserve(10000000);
+
+    //int64_t d_arr [INT64_MAX]; array is too large
+
 
     int c;
     if (argc < 2){
@@ -54,12 +72,13 @@ int main(int argc, char** argv){
             {"fasta", required_argument, 0, 'f'},
             {"minhash", required_argument, 0, 'm'},
             {"threads", required_argument, 0, 't'},
-            {"min-kmer-occurence", required_argument, 0, 'M'},
+            {"min-kmer-occurence", required_argument, 0, 'D'},
+            {"min-matches", required_argument, 0, 'S'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hm:k:r:f:t:M:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hm:k:r:f:t:D:S:", long_options, &option_index);
         if (c == -1){
             break;
         }
@@ -87,8 +106,11 @@ int main(int argc, char** argv){
             case 'm':
                 sketch_size = atoi(optarg);
                 break;
-            case 'M':
+            case 'D':
                 min_kmer_occ = atoi(optarg);
+                break;
+            case 'S':
+                min_matches = atoi(optarg);
                 break;
             default:
                 print_help(argv);
@@ -96,19 +118,6 @@ int main(int argc, char** argv){
 
         }
     }
-
-
-    map<string, string> ref_to_seq;
-    map<string, vector<int64_t> > ref_to_hashes;
-    map<string, vector<string> > ref_to_kmers;
-
-    map<string, string> read_to_seq;
-    map<string, vector<int64_t> > read_to_hashes;
-    map<string, vector<string> > read_to_kmers;
-
-    unordered_map<string, int> kmer_to_depth;
-    unordered_map<int64_t, int> hash_to_depth;
-
 
     omp_set_num_threads(threads);
     // Read in fastas
@@ -145,7 +154,10 @@ int main(int argc, char** argv){
             }
         }
 
-        cerr << "Loaded " << read_to_seq.size() << " reads." << endl;
+        errtre << "Loaded " << read_to_seq.size() << " reads." << endl;
+
+        cerr << errtre.str(); //<< "Loaded " << read_to_seq.size() << " reads." << endl;
+        errtre.str(std::string());
     }
     else{
         cerr << "Please provide a read file containing query sequences." << endl;
@@ -155,15 +167,22 @@ int main(int argc, char** argv){
     vector<pair<string, string > > ref_seq(ref_to_seq.begin(), ref_to_seq.end());
     vector<pair<string, string> > read_seq(read_to_seq.begin(), read_to_seq.end());
     
+    #pragma omp parallel
 
     if (min_kmer_occ > 0){
         // fill in kmer_to_depth;
-        #pragma omp parallel for
+        //#pragma omp parallel for
+        #pragma omp for
         for (int i = 0; i < read_seq.size(); i++){
-            vector<int64_t> rhash = allhash_unsorted_64(read_seq[i].second, kmer);
-            read_to_hashes[read_seq[i].first] = rhash;
-            for (auto j : rhash){
-                hash_to_depth[j] += 1;
+            pair<string, string> n_to_s = read_seq[i];
+            vector<int64_t> rhash = allhash_unsorted_64(n_to_s.second, kmer);
+            //#pragma omp atomic
+            #pragma omp critical
+            {
+            read_to_hashes[n_to_s.first] = rhash;
+                for (auto j : rhash){
+                    hash_to_depth[j] += 1;
+                }
             }
         }
     }
@@ -172,29 +191,35 @@ int main(int argc, char** argv){
     if (sketch_size > 0){
         cerr << "Making reference sketches..." << endl;
 
-        #pragma omp parallel for
+        //#pragma omp parallel for schedule(dynamic)
+        #pragma omp for
         for (int i = 0; i < ref_seq.size(); i++){
             ref_to_hashes[ref_seq[i].first] = minhash_64(ref_seq[i].second, kmer, sketch_size, true);
         }
         cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
 
-        #pragma omp parallel for
+        //#pragma omp parallel for schedule(dynamic)
+        #pragma omp for
         for (int i = 0; i < read_seq.size(); i++){
             stringstream outre;
             vector<int64_t> hashes;
             if (min_kmer_occ > 0){
                 hashes = minhash_64_depth_filter(read_to_hashes[read_seq[i].first], sketch_size, true, min_kmer_occ, hash_to_depth);
-
-                cerr << hashes.size() << endl;
             }
             else{
                 hashes = minhash_64(read_seq[i].second, kmer, sketch_size, true);
             }
             tuple<string, int, int> result;
             result = classify_and_count(hashes, ref_to_hashes);
+            
+            
+            bool depth_filter = hashes.size() == 0; 
+            bool match_filter = std::get<1>(result) < min_matches;
             //#pragma omp critical
             outre  << "Sample: " << read_seq[i].first << "\t" << "Result: " << 
-                std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;   
+                std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
+                (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
+
             cout << outre.str();
         }
     }
@@ -208,7 +233,8 @@ int main(int argc, char** argv){
             std::sort(ref_to_kmers[itersk->first].begin(), ref_to_kmers[itersk->first].end());
         }
 
-        cerr << "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
+        errtre << "Processed " << ref_to_kmers.size() << " references to kmers.";
+        cerr << errtre.str() << endl; //<< "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
 
         for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
             read_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
@@ -220,12 +246,11 @@ int main(int argc, char** argv){
 
 
         }
-
+    
         //cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
 
 
     }
-
 
 
 
