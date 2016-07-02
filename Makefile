@@ -10,8 +10,6 @@ rkmh: rkmh.cpp equiv.hpp mkmh/libmkmh.a
 mkmh/libmkmh.a:
 	cd mkmh && $(MAKE)
 
-#equiv.hpp:
-
 .PHONY: clean clobber lib
 
 clean:

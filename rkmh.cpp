@@ -168,8 +168,10 @@ int main(int argc, char** argv){
     vector<pair<string, string> > read_seq(read_to_seq.begin(), read_to_seq.end());
     
     #pragma omp parallel
-
+    {
     if (min_kmer_occ > 0){
+        #pragma omp master
+        cerr << "Making kmer depth map..." << endl;
         // fill in kmer_to_depth;
         //#pragma omp parallel for
         #pragma omp for
@@ -179,9 +181,9 @@ int main(int argc, char** argv){
             //#pragma omp atomic
             #pragma omp critical
             {
-            read_to_hashes[n_to_s.first] = rhash;
-                for (auto j : rhash){
-                    hash_to_depth[j] += 1;
+                read_to_hashes[n_to_s.first] = rhash;
+                for (int j = 0; j < rhash.size(); j++){
+                    hash_to_depth[rhash[j]] += 1;
                 }
             }
         }
@@ -189,6 +191,7 @@ int main(int argc, char** argv){
 
 
     if (sketch_size > 0){
+        #pragma omp master
         cerr << "Making reference sketches..." << endl;
 
         //#pragma omp parallel for schedule(dynamic)
@@ -196,6 +199,8 @@ int main(int argc, char** argv){
         for (int i = 0; i < ref_seq.size(); i++){
             ref_to_hashes[ref_seq[i].first] = minhash_64(ref_seq[i].second, kmer, sketch_size, true);
         }
+
+        #pragma omp master
         cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
 
         //#pragma omp parallel for schedule(dynamic)
@@ -251,7 +256,7 @@ int main(int argc, char** argv){
 
 
     }
-
+    }
 
 
 
