@@ -6,6 +6,7 @@
 #include <tuple>
 #include <cstdint>
 #include <map>
+#include <unordered_map>
 #include <omp.h>
 #include "mkmh.hpp"
 
@@ -50,37 +51,17 @@ inline map<string, int> make_sample_to_count(vector<string>& read_kmers, map<str
 
     return sample_to_count;
 };
+/*
+ * int64_t [] make_hash_to_depth(min_depth, vector<int64_t> hashes);
+ * */
+
+
 
 inline string classify(vector<string>& read_kmers, map<string, vector<string> >& kmer_to_samples){
 
     
 };
 
-struct Classification{
-    string sample = "";
-    int shared_intersection = 0;
-    int total_union = 0;
-};
-/*
-inline struct Classification classify_and_count(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
-     //Parallel compare through the map would be really nice...
-    int max_shared = 0;
-    struct Classification ret;
-    ret.sample = "";
-    ret.shared_intersection = 0;
-    ret.total_union = 0;
-    map<string, vector<int64_t> >::iterator iter;
-    for (iter = ref_to_hashes.begin(); iter != ref_to_hashes.end(); iter++){
-         vector<int64_t> matches = hash_intersection(read_hashes, iter->second);
-         if (matches.size() > max_shared){
-            ret.sample = iter->first;
-            ret.shared_intersection = matches.size();
-            ret.total_union = hash_set_union(read_hashes, iter->second).size();
-         }
-    }
-    return ret;   
-};
-*/
 inline tuple<string, int, int> classify_and_count(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
      //Parallel compare through the map would be really nice...
     int max_shared = 0;
@@ -126,8 +107,6 @@ inline tuple<string, int, int> p_classify_and_count(vector<int64_t>& read_hashes
     }
     return std::make_tuple(sample, shared_intersection, total_union);   
 };
-
-
 
 
 inline tuple<string, int, int> kmer_classify(vector<string>& readmers, map<string, vector<string> >& ref_mers){

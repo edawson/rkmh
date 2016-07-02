@@ -8,6 +8,7 @@
 #include <omp.h>
 #include <getopt.h>
 #include <map>
+#include <unordered_map>
 #include "mkmh.hpp"
 #include "kseq.hpp"
 #include "equiv.hpp"
@@ -23,7 +24,8 @@ KSEQ_INIT(gzFile, gzread)
             << "--fasta/-f   <FASTAFILE>" << endl
             << "--kmer/-k    <KMERSIZE>" << endl
             << "--minhash/-h <HASHSIZE>" << endl
-            << "--threads/-t <THREADS>" << endl;
+            << "--threads/-t <THREADS>" << endl
+            << "--min-kmer-occurence/-M <MINOCCURENCE>" << endl;
     }
 
 
@@ -35,6 +37,7 @@ int main(int argc, char** argv){
     vector<int> kmer;
     int sketch_size = -1;
     int threads = 1;
+    int min_kmer_occ = 0;
 
     int c;
     if (argc < 2){
@@ -51,11 +54,12 @@ int main(int argc, char** argv){
             {"fasta", required_argument, 0, 'f'},
             {"minhash", required_argument, 0, 'm'},
             {"threads", required_argument, 0, 't'},
+            {"min-kmer-occurence", required_argument, 0, 'M'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hm:k:r:f:t:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hm:k:r:f:t:M:", long_options, &option_index);
         if (c == -1){
             break;
         }
@@ -83,6 +87,9 @@ int main(int argc, char** argv){
             case 'm':
                 sketch_size = atoi(optarg);
                 break;
+            case 'M':
+                min_kmer_occ = atoi(optarg);
+                break;
             default:
                 print_help(argv);
                 abort();
@@ -98,6 +105,10 @@ int main(int argc, char** argv){
     map<string, string> read_to_seq;
     map<string, vector<int64_t> > read_to_hashes;
     map<string, vector<string> > read_to_kmers;
+
+    unordered_map<string, int> kmer_to_depth;
+    unordered_map<int64_t, int> hash_to_depth;
+
 
     omp_set_num_threads(threads);
     // Read in fastas
@@ -124,52 +135,68 @@ int main(int argc, char** argv){
     }
 
 
-    vector<pair<string, string > > read_seq;
     if (read_files.size() > 0){
         for (auto f : read_files){
             fp = gzopen(f, "r");
             seq = kseq_init(fp);
-            // Read in reads, cluster, spit it back out
             while ((l = kseq_read(seq)) >= 0) {
-                //read_to_seq[seq->name.s] = to_upper(seq->seq.s);
-                read_seq.push_back(make_pair(seq->name.s, seq->seq.s));
+                read_to_seq[seq->name.s] = to_upper(seq->seq.s);
+                //read_seq.push_back(make_pair(seq->name.s, seq->seq.s));
             }
         }
 
-        cerr << "Loaded " << read_seq.size() << " reads." << endl;
+        cerr << "Loaded " << read_to_seq.size() << " reads." << endl;
     }
     else{
         cerr << "Please provide a read file containing query sequences." << endl;
         exit(1);
     }
 
+    vector<pair<string, string > > ref_seq(ref_to_seq.begin(), ref_to_seq.end());
+    vector<pair<string, string> > read_seq(read_to_seq.begin(), read_to_seq.end());
+    
+
+    if (min_kmer_occ > 0){
+        // fill in kmer_to_depth;
+        #pragma omp parallel for
+        for (int i = 0; i < read_seq.size(); i++){
+            vector<int64_t> rhash = allhash_unsorted_64(read_seq[i].second, kmer);
+            read_to_hashes[read_seq[i].first] = rhash;
+            for (auto j : rhash){
+                hash_to_depth[j] += 1;
+            }
+        }
+    }
+
 
     if (sketch_size > 0){
         cerr << "Making reference sketches..." << endl;
 
-        vector<pair<string, string > > ref_seq(ref_to_seq.begin(), ref_to_seq.end());
         #pragma omp parallel for
         for (int i = 0; i < ref_seq.size(); i++){
             ref_to_hashes[ref_seq[i].first] = minhash_64(ref_seq[i].second, kmer, sketch_size, true);
         }
         cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
 
-        //vector<pair<string, string > > read_seq(read_to_seq.begin(), read_to_seq.end());
-
         #pragma omp parallel for
         for (int i = 0; i < read_seq.size(); i++){
             stringstream outre;
-            //vector<int64_t> hashes = minhash_64(read_seq[i].second, kmer, sketch_size, true);
-            vector<int64_t> hashes = minhash_64(read_seq[i].second, kmer, sketch_size, true);
+            vector<int64_t> hashes;
+            if (min_kmer_occ > 0){
+                hashes = minhash_64_depth_filter(read_to_hashes[read_seq[i].first], sketch_size, true, min_kmer_occ, hash_to_depth);
+
+                cerr << hashes.size() << endl;
+            }
+            else{
+                hashes = minhash_64(read_seq[i].second, kmer, sketch_size, true);
+            }
             tuple<string, int, int> result;
             result = classify_and_count(hashes, ref_to_hashes);
             //#pragma omp critical
             outre  << "Sample: " << read_seq[i].first << "\t" << "Result: " << 
                 std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;   
             cout << outre.str();
-
         }
-
     }
 
     else{
