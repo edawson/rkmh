@@ -128,6 +128,17 @@ inline tuple<string, int, int> kmer_classify(vector<string>& readmers, map<strin
      return std::make_tuple(sample, inter, uni);
 };
 
+inline vector<int> all_hash_compare(vector<int64_t>& hashes, vector<pair<string, vector<int64_t> > >& ref_hashes){
+    vector<int> ret(ref_hashes.size(), 0);
+    #pragma omp for
+    for (int i = 0; i < ret.size(); i++){
+        ret[i] = hash_intersection(hashes, ref_hashes[i].second).size();
+    }
+
+    return ret;
+    
+};
+
 inline string classify(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
 
     //Parallel compare through the map would be really nice...
