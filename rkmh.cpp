@@ -164,6 +164,11 @@ int main(int argc, char** argv){
         exit(1);
     }
 
+    if (kmer.size() < 1){
+        cerr << "No kmer size provided. The default of 16 will be used." << endl;
+        kmer.push_back(16);
+    }
+
     vector<pair<string, string > > ref_seq(ref_to_seq.begin(), ref_to_seq.end());
     vector<pair<string, string> > read_seq(read_to_seq.begin(), read_to_seq.end());
     
@@ -243,6 +248,10 @@ int main(int argc, char** argv){
         for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
             ref_heaps[itersk->first] = kmer_heap(itersk->second, kmer);
         }
+        
+        errtre << "Processed " << ref_heaps.size() << " references to kmers." << endl;
+        #pragma omp master
+        cerr << errtre;
 
         //vector<pair<string, priority_queue<string> > > p_read_heaps(readheap.begin(), readheap.end());
         vector<pair<string, priority_queue<string> > > p_ref_heaps(ref_heaps.begin(), ref_heaps.end());
