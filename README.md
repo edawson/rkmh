@@ -45,10 +45,10 @@ It's availble via the `-P` flag:
 
 ### Performance
 On a set of 1000 minION reads from a known HPV strain, rkmh is ~97% accurate (correctly placing the read in the right strain
-of 182 input reference strains) and runs in <30 seconds. With the kemr depth and minimum match filters we're approaching >99% accuracy for about the same run time.
+of 182 input reference strains) and runs in <30 seconds. With the kmer depth and minimum match filters we're approaching >99% accuracy for about the same run time.
 We're working on ways to improve sensitivity with further filtering and correction.
 
-rkmh is threaded using OpenMP but the code should be considered minimally tuned.
+rkmh is threaded using OpenMP but the code should be considered minimally tuned. Hashing can handle around 250 reads/second and kmer comparison around 40 reads / second.
 
 ### Getting help
 Please post to the [github](https://github.com/edawson/rkmh.git) for help.
