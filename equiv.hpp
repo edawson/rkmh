@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <queue>
 #include <tuple>
 #include <cstdint>
 #include <map>
@@ -57,9 +58,21 @@ inline map<string, int> make_sample_to_count(vector<string>& read_kmers, map<str
 
 
 
-inline string classify(vector<string>& read_kmers, map<string, vector<string> >& kmer_to_samples){
-
-    
+inline tuple<string, int, int> kmer_heap_classify(priority_queue<string> readmers, vector<pair<string, priority_queue<string> > > ref_mers){
+    int max_shared = 0;
+    string sample = "";
+    int shared_intersection = 0;
+    int total_union = 0;
+    for (int i = 0; i < ref_mers.size(); i++){
+        priority_queue<string> matches = kmer_heap_intersection(readmers, ref_mers[i].second);
+        if (matches.size() > max_shared){
+            max_shared = matches.size();
+            sample = ref_mers[i].first;
+            shared_intersection = matches.size();
+            total_union = readmers.size();
+        }
+    }
+    return std::make_tuple(sample, shared_intersection, total_union); 
 };
 
 inline tuple<string, int, int> classify_and_count(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){

@@ -230,17 +230,35 @@ int main(int argc, char** argv){
     }
 
     else{
+        #pragma omp master
         cerr << "Performing direct kmer-based comparison." << endl;
+        map<string, priority_queue<string>> readheap;
         map<string, string>::iterator itersk;
+        //for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
+            //ref_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
+            //std::sort(ref_to_kmers[itersk->first].begin(), ref_to_kmers[itersk->first].end());
+        //    readheap[itersk->first] = kmer_heap(itersk->second, kmer);
+        //}
+        map<string, priority_queue<string> > ref_heaps;
         for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
-            ref_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
-
-            std::sort(ref_to_kmers[itersk->first].begin(), ref_to_kmers[itersk->first].end());
+            ref_heaps[itersk->first] = kmer_heap(itersk->second, kmer);
         }
 
-        errtre << "Processed " << ref_to_kmers.size() << " references to kmers.";
-        cerr << errtre.str() << endl; //<< "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
+        //vector<pair<string, priority_queue<string> > > p_read_heaps(readheap.begin(), readheap.end());
+        vector<pair<string, priority_queue<string> > > p_ref_heaps(ref_heaps.begin(), ref_heaps.end());
+        #pragma omp for
+        for (int i = 0; i < read_seq.size(); i++){
 
+            stringstream outre;
+
+            priority_queue<string> read_q = kmer_heap(read_seq[i].second, kmer);
+            tuple<string, int, int> result = kmer_heap_classify(read_q, p_ref_heaps);
+            outre << read_seq[i].first << "\t" << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
+            cout << outre.str();
+        }
+        //errtre << "Processed " << ref_to_kmers.size() << " references to kmers.";
+        //cerr << errtre.str() << endl; //<< "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
+/*
         for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
             read_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
             std::sort(read_to_kmers[itersk->first].begin(), read_to_kmers[itersk->first].end());
@@ -251,8 +269,8 @@ int main(int argc, char** argv){
 
 
         }
-    
         //cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
+        */
 
 
     }
