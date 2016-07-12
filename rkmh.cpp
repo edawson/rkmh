@@ -171,118 +171,122 @@ int main(int argc, char** argv){
 
     vector<pair<string, string > > ref_seq(ref_to_seq.begin(), ref_to_seq.end());
     vector<pair<string, string> > read_seq(read_to_seq.begin(), read_to_seq.end());
-    
+
     #pragma omp parallel
     {
-    if (min_kmer_occ > 0){
-        #pragma omp master
-        cerr << "Making kmer depth map..." << endl;
-        // fill in kmer_to_depth;
-        //#pragma omp parallel for
-        #pragma omp for
-        for (int i = 0; i < read_seq.size(); i++){
-            pair<string, string> n_to_s = read_seq[i];
-            vector<int64_t> rhash = allhash_unsorted_64(n_to_s.second, kmer);
-            //#pragma omp atomic
-            #pragma omp critical
-            {
+        if (min_kmer_occ > 0){
+            #pragma omp master
+            cerr << "Making kmer depth map..." << endl;
+            // fill in kmer_to_depth;
+            //#pragma omp parallel for
+            #pragma omp for
+            for (int i = 0; i < read_seq.size(); i++){
+                pair<string, string> n_to_s = read_seq[i];
+                //vector<int64_t> rhash = allhash_unsorted_64(n_to_s.second, kmer);
+                const char* x = n_to_s.second.c_str();
+                vector<int64_t> rhash = allhash_unsorted_64_fast(x, kmer);
+                //#pragma omp atomic read
                 read_to_hashes[n_to_s.first] = rhash;
-                for (int j = 0; j < rhash.size(); j++){
-                    hash_to_depth[rhash[j]] += 1;
+                //#pragma omp critical
+                {
+                    for (int j = 0; j < rhash.size(); j++){
+                        #pragma omp atomic update
+                        //hash_to_depth[rhash[j]] += 1;
+                        hash_to_depth[rhash[j]] ++;
+                    }
                 }
             }
         }
-    }
 
 
-    if (sketch_size > 0){
-        #pragma omp master
-        cerr << "Making reference sketches..." << endl;
+        if (sketch_size > 0){
+            #pragma omp master
+            cerr << "Making reference sketches..." << endl;
 
-        //#pragma omp parallel for schedule(dynamic)
-        #pragma omp for
-        for (int i = 0; i < ref_seq.size(); i++){
-            ref_to_hashes[ref_seq[i].first] = minhash_64(ref_seq[i].second, kmer, sketch_size, true);
+            //#pragma omp parallel for schedule(dynamic)
+            #pragma omp for
+            for (int i = 0; i < ref_seq.size(); i++){
+                ref_to_hashes[ref_seq[i].first] = minhash_64_fast(ref_seq[i].second, kmer, sketch_size, true);
+            }
+
+            #pragma omp master
+            cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
+
+            //#pragma omp parallel for schedule(dynamic)
+            #pragma omp for
+            for (int i = 0; i < read_seq.size(); i++){
+                stringstream outre;
+                vector<int64_t> hashes;
+                if (min_kmer_occ > 0){
+                    hashes = minhash_64_depth_filter(read_to_hashes[read_seq[i].first], sketch_size, true, min_kmer_occ, hash_to_depth);
+                }
+                else{
+                    hashes = minhash_64_fast(read_seq[i].second, kmer, sketch_size, true);
+                }
+                tuple<string, int, int> result;
+                result = classify_and_count(hashes, ref_to_hashes);
+
+
+                bool depth_filter = hashes.size() == 0; 
+                bool match_filter = std::get<1>(result) < min_matches;
+                //#pragma omp critical
+                outre  << "Sample: " << read_seq[i].first << "\t" << "Result: " << 
+                    std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
+                    (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
+
+                cout << outre.str();
+            }
         }
 
-        #pragma omp master
-        cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
-
-        //#pragma omp parallel for schedule(dynamic)
-        #pragma omp for
-        for (int i = 0; i < read_seq.size(); i++){
-            stringstream outre;
-            vector<int64_t> hashes;
-            if (min_kmer_occ > 0){
-                hashes = minhash_64_depth_filter(read_to_hashes[read_seq[i].first], sketch_size, true, min_kmer_occ, hash_to_depth);
-            }
-            else{
-                hashes = minhash_64(read_seq[i].second, kmer, sketch_size, true);
-            }
-            tuple<string, int, int> result;
-            result = classify_and_count(hashes, ref_to_hashes);
-            
-            
-            bool depth_filter = hashes.size() == 0; 
-            bool match_filter = std::get<1>(result) < min_matches;
-            //#pragma omp critical
-            outre  << "Sample: " << read_seq[i].first << "\t" << "Result: " << 
-                std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
-                (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
-
-            cout << outre.str();
-        }
-    }
-
-    else{
-        #pragma omp master
-        cerr << "Performing direct kmer-based comparison." << endl;
-        map<string, priority_queue<string>> readheap;
-        map<string, string>::iterator itersk;
-        //for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
+        else{
+            #pragma omp master
+            cerr << "Performing direct kmer-based comparison." << endl;
+            map<string, priority_queue<string>> readheap;
+            map<string, string>::iterator itersk;
+            //for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
             //ref_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
             //std::sort(ref_to_kmers[itersk->first].begin(), ref_to_kmers[itersk->first].end());
-        //    readheap[itersk->first] = kmer_heap(itersk->second, kmer);
-        //}
-        map<string, priority_queue<string> > ref_heaps;
-        for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
-            ref_heaps[itersk->first] = kmer_heap(itersk->second, kmer);
+            //    readheap[itersk->first] = kmer_heap(itersk->second, kmer);
+            //}
+            map<string, priority_queue<string> > ref_heaps;
+            for (itersk = ref_to_seq.begin(); itersk != ref_to_seq.end(); itersk++){
+                ref_heaps[itersk->first] = kmer_heap(itersk->second, kmer);
+            }
+
+            errtre << "Processed " << ref_heaps.size() << " references to kmers." << endl;
+#pragma omp master
+            cerr << errtre;
+
+            //vector<pair<string, priority_queue<string> > > p_read_heaps(readheap.begin(), readheap.end());
+            vector<pair<string, priority_queue<string> > > p_ref_heaps(ref_heaps.begin(), ref_heaps.end());
+#pragma omp for
+            for (int i = 0; i < read_seq.size(); i++){
+
+                stringstream outre;
+
+                priority_queue<string> read_q = kmer_heap(read_seq[i].second, kmer);
+                tuple<string, int, int> result = kmer_heap_classify(read_q, p_ref_heaps);
+                outre << read_seq[i].first << "\t" << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
+                cout << outre.str();
+            }
+            //errtre << "Processed " << ref_to_kmers.size() << " references to kmers.";
+            //cerr << errtre.str() << endl; //<< "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
+            /*
+               for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
+               read_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
+               std::sort(read_to_kmers[itersk->first].begin(), read_to_kmers[itersk->first].end());
+
+               tuple<string, int, int> result = kmer_classify(read_to_kmers[itersk->first], ref_to_kmers);
+               cout  << "Sample: " << itersk->first << "\t"
+               << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
+
+
+               }
+            //cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
+            */
+
+
         }
-        
-        errtre << "Processed " << ref_heaps.size() << " references to kmers." << endl;
-        #pragma omp master
-        cerr << errtre;
-
-        //vector<pair<string, priority_queue<string> > > p_read_heaps(readheap.begin(), readheap.end());
-        vector<pair<string, priority_queue<string> > > p_ref_heaps(ref_heaps.begin(), ref_heaps.end());
-        #pragma omp for
-        for (int i = 0; i < read_seq.size(); i++){
-
-            stringstream outre;
-
-            priority_queue<string> read_q = kmer_heap(read_seq[i].second, kmer);
-            tuple<string, int, int> result = kmer_heap_classify(read_q, p_ref_heaps);
-            outre << read_seq[i].first << "\t" << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
-            cout << outre.str();
-        }
-        //errtre << "Processed " << ref_to_kmers.size() << " references to kmers.";
-        //cerr << errtre.str() << endl; //<< "Processed " << ref_to_kmers.size() << " references to kmers." << endl;
-/*
-        for (itersk = read_to_seq.begin(); itersk != read_to_seq.end(); itersk++){
-            read_to_kmers[itersk->first] = multi_kmerize(itersk->second, kmer);
-            std::sort(read_to_kmers[itersk->first].begin(), read_to_kmers[itersk->first].end());
-
-            tuple<string, int, int> result = kmer_classify(read_to_kmers[itersk->first], ref_to_kmers);
-            cout  << "Sample: " << itersk->first << "\t"
-                << "Result: " << std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << endl;
-
-
-        }
-        //cerr << "Processed " << read_to_kmers.size() << " reads to kmers." << endl;
-        */
-
-
-    }
     }
 
 
