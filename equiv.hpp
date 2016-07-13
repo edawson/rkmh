@@ -14,6 +14,8 @@
 
 using namespace std;
 using namespace mkmh;
+
+
 inline map<string, vector<string> > make_kmer_to_samples(map<string, vector<string>>& sample_to_kmers){
     map<string, vector<string> > ret;
     map<string, vector<string> >::iterator sk_iter;
@@ -52,10 +54,6 @@ inline map<string, int> make_sample_to_count(vector<string>& read_kmers, map<str
 
     return sample_to_count;
 };
-/*
- * int64_t [] make_hash_to_depth(min_depth, vector<int64_t> hashes);
- * */
-
 
 
 inline tuple<string, int, int> kmer_heap_classify(priority_queue<string> readmers, vector<pair<string, priority_queue<string> > > ref_mers){
@@ -74,6 +72,35 @@ inline tuple<string, int, int> kmer_heap_classify(priority_queue<string> readmer
     }
     return std::make_tuple(sample, shared_intersection, total_union); 
 };
+
+inline tuple<string, int, int, bool> classify(vector<int64_t>& read_hashes, vector<int>& ref_counts, vector<pair<string, vector<int64_t> > >& ref_hashes, int min_diff){
+    vector<int>::iterator max_iter = max_element(ref_counts.begin(), ref_counts.end());
+    int max_val = int(*max_iter);
+    int max_index = distance(ref_counts.begin(), max_iter);
+    bool fail_min_diff = false;
+    string sample = ref_hashes[max_index].first;
+    sort(ref_counts.begin(), ref_counts.end(), std::greater<int>());
+    if (ref_counts.size() >= 2 && ref_counts[0] - ref_counts[1] <= min_diff){
+        fail_min_diff = true;
+    }
+    
+    return make_tuple(sample, max_val, read_hashes.size(), fail_min_diff);
+
+}
+
+inline vector<int> all_count(vector<int64_t> read_hashes, vector<pair<string, vector<int64_t> > >& ref_to_hashes){
+     //Parallel compare through the map would be really nice...
+    vector<int> ret(ref_to_hashes.size(), 0);
+    #pragma omp parallel for
+    for (int i = 0; i < ref_to_hashes.size(); i++){
+         vector<int64_t> matches = hash_intersection(read_hashes, ref_to_hashes[i].second);
+         ret[i] = matches.size();
+    }
+    return ret;
+    //return std::make_tuple(sample, shared_intersection, total_union);   
+};
+
+
 
 inline tuple<string, int, int> classify_and_count(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
      //Parallel compare through the map would be really nice...

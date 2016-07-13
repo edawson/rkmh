@@ -26,7 +26,8 @@ KSEQ_INIT(gzFile, gzread)
             << "--minhash/-m <HASHSIZE>" << endl
             << "--threads/-t <THREADS>" << endl
             << "--min-kmer-occurence/-D <MINOCCURENCE>" << endl
-            << "--min-matches/-S <MINMATCHES>" << endl;
+            << "--min-matches/-S <MINMATCHES>" << endl
+            << "--min-diff/-P    <MINDIFFERENCE>" << endl;
     }
 
 
@@ -40,6 +41,7 @@ int main(int argc, char** argv){
     int threads = 1;
     int min_kmer_occ = 0;
     int min_matches = -1;
+    int min_diff = 0;
 
     stringstream errtre;
     map<string, string> ref_to_seq;
@@ -74,11 +76,12 @@ int main(int argc, char** argv){
             {"threads", required_argument, 0, 't'},
             {"min-kmer-occurence", required_argument, 0, 'D'},
             {"min-matches", required_argument, 0, 'S'},
+            {"min-diff", required_argument, 0, 'P'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hm:k:r:f:t:D:S:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hm:k:r:f:t:D:S:P:", long_options, &option_index);
         if (c == -1){
             break;
         }
@@ -111,6 +114,9 @@ int main(int argc, char** argv){
                 break;
             case 'S':
                 min_matches = atoi(optarg);
+                break;
+            case 'P':
+                min_diff = atoi(optarg);
                 break;
             default:
                 print_help(argv);
@@ -198,6 +204,14 @@ int main(int argc, char** argv){
             }
         }
 
+    #pragma omp master
+    {
+        if (min_kmer_occ > 0){
+        errtre << "Hash_to_depth size: " << hash_to_depth.size() << endl;
+        cerr << errtre.str();
+        errtre.str("");
+        }
+    }
 
         if (sketch_size > 0){
             #pragma omp master
@@ -236,6 +250,7 @@ int main(int argc, char** argv){
 
                 cout << outre.str();
             }
+
         }
 
         else{
