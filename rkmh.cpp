@@ -26,7 +26,8 @@ KSEQ_INIT(gzFile, gzread)
             << "--minhash/-m <HASHSIZE>" << endl
             << "--threads/-t <THREADS>" << endl
             << "--min-kmer-occurence/-D <MINOCCURENCE>" << endl
-            << "--min-matches/-S <MINMATCHES>" << endl;
+            << "--min-matches/-S <MINMATCHES>" << endl
+            << "--min-diff/-P    <MINDIFFERENCE>" << endl;
     }
 
 
@@ -40,6 +41,7 @@ int main(int argc, char** argv){
     int threads = 1;
     int min_kmer_occ = 0;
     int min_matches = -1;
+    int min_diff = 0;
 
     stringstream errtre;
     map<string, string> ref_to_seq;
@@ -74,11 +76,12 @@ int main(int argc, char** argv){
             {"threads", required_argument, 0, 't'},
             {"min-kmer-occurence", required_argument, 0, 'D'},
             {"min-matches", required_argument, 0, 'S'},
+            {"min-diff", required_argument, 0, 'P'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hm:k:r:f:t:D:S:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hm:k:r:f:t:D:S:P:", long_options, &option_index);
         if (c == -1){
             break;
         }
@@ -111,6 +114,9 @@ int main(int argc, char** argv){
                 break;
             case 'S':
                 min_matches = atoi(optarg);
+                break;
+            case 'P':
+                min_diff = atoi(optarg);
                 break;
             default:
                 print_help(argv);
@@ -194,6 +200,14 @@ int main(int argc, char** argv){
         }
     }
 
+    #pragma omp master
+    {
+        if (min_kmer_occ > 0){
+        errtre << "Hash_to_depth size: " << hash_to_depth.size() << endl;
+        cerr << errtre.str();
+        errtre.str("");
+        }
+    }
 
     if (sketch_size > 0){
         #pragma omp master
@@ -205,8 +219,13 @@ int main(int argc, char** argv){
             ref_to_hashes[ref_seq[i].first] = minhash_64(ref_seq[i].second, kmer, sketch_size, true);
         }
 
+        vector<pair<string, vector<int64_t> > > ref_hashes(ref_to_hashes.begin(), ref_to_hashes.end());
+
         #pragma omp master
         cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
+
+        #pragma omp master
+        cerr << "Processing " << read_seq.size() << " reads to MinHashes..." << endl;
 
         //#pragma omp parallel for schedule(dynamic)
         #pragma omp for
@@ -219,16 +238,26 @@ int main(int argc, char** argv){
             else{
                 hashes = minhash_64(read_seq[i].second, kmer, sketch_size, true);
             }
+
             tuple<string, int, int> result;
-            result = classify_and_count(hashes, ref_to_hashes);
-            
+            bool min_diff_filter = false;
+            if (min_diff > 0){
+                vector<int> ref_counts = all_count(hashes, ref_hashes);
+                tuple<string, int, int, bool> tmp = classify(hashes, ref_counts, ref_hashes, min_diff);
+                min_diff_filter = std::get<3>(tmp);
+                result = make_tuple(std::get<0>(tmp), std::get<1>(tmp), std::get<2>(tmp));
+            }
+            else{
+                result = classify_and_count(hashes, ref_to_hashes);
+            }
             
             bool depth_filter = hashes.size() == 0; 
             bool match_filter = std::get<1>(result) < min_matches;
             //#pragma omp critical
             outre  << "Sample: " << read_seq[i].first << "\t" << "Result: " << 
                 std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
-                (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
+                (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" <<
+                (min_diff_filter ? "FAIL:MINIMUMDIFF" : "") << endl;
 
             cout << outre.str();
         }
