@@ -27,6 +27,38 @@ inline map<string, vector<string> > make_kmer_to_samples(map<string, vector<stri
     return ret;
 };
 
+// TODO this is incorrect; no sample names are accounted for
+inline map<int64_t, int> make_kmer_to_sample_count(vector<pair<string, vector<int64_t> > > name_to_hashes){
+    map<int64_t, int> ret;
+    map<int64_t, set<string> > helper;
+    for (int i = 0; i < name_to_hashes.size(); i++){
+        for (int j = 0; j < name_to_hashes[i].second.size(); j++){
+            helper[name_to_hashes[i].second[j]].insert(name_to_hashes[i].first);
+        }
+    }
+
+    for (auto x : helper){
+        ret[x.first] = x.second.size();
+    }
+    return ret;
+
+};
+
+inline map<string, vector<int64_t> > only_informative_kmers(map<string, vector<int64_t> > name_to_hashes, int max_samples){
+    auto vv_count = vector<pair<string, vector<int64_t> > > (name_to_hashes.begin(), name_to_hashes.end());
+    map<int64_t, int> hash_to_count = make_kmer_to_sample_count(vv_count);
+    map<string, vector<int64_t> > ret;
+    for (auto x : name_to_hashes){
+        for (int i = 0; i < x.second.size(); i++){
+            if (hash_to_count[x.second[i]] < max_samples){
+                ret[x.first].push_back(x.second[i]);
+            }
+        }
+    }
+    return ret;
+};
+
+
 inline map<string, vector<string> > make_sample_to_kmers(map<string, string>& name_to_sequence, int k){
     map<string, vector<string> > ret;
 

@@ -27,7 +27,9 @@ KSEQ_INIT(gzFile, gzread)
             << "--threads/-t <THREADS>" << endl
             << "--min-kmer-occurence/-D <MINOCCURENCE>" << endl
             << "--min-matches/-S <MINMATCHES>" << endl
-            << "--min-diff/-P    <MINDIFFERENCE>" << endl;
+            << "--min-diff/-P    <MINDIFFERENCE>" << endl
+            << "--min-informative/-I <MAXSAMPLES> only use kmers present in fewer than MAXSAMPLES" << endl
+            << endl;
     }
 
 
@@ -42,6 +44,7 @@ int main(int argc, char** argv){
     int min_kmer_occ = 0;
     int min_matches = -1;
     int min_diff = 0;
+    int max_sample = 1000000;
 
     stringstream errtre;
     map<string, string> ref_to_seq;
@@ -77,11 +80,12 @@ int main(int argc, char** argv){
             {"min-kmer-occurence", required_argument, 0, 'D'},
             {"min-matches", required_argument, 0, 'S'},
             {"min-diff", required_argument, 0, 'P'},
+            {"min-samples", required_argument, 0, 'I'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hm:k:r:f:t:D:S:P:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hm:k:r:f:t:D:S:P:I:", long_options, &option_index);
         if (c == -1){
             break;
         }
@@ -117,6 +121,9 @@ int main(int argc, char** argv){
                 break;
             case 'P':
                 min_diff = atoi(optarg);
+                break;
+            case 'I':
+                max_sample = atoi(optarg);
                 break;
             default:
                 print_help(argv);
@@ -222,7 +229,9 @@ int main(int argc, char** argv){
             for (int i = 0; i < ref_seq.size(); i++){
                 ref_to_hashes[ref_seq[i].first] = minhash_64_fast(ref_seq[i].second, kmer, sketch_size, true);
             }
-
+            
+            //only_informative_kmers(map<string, vector<int64_t> > name_to_hashes, int max_samples) 
+           ref_to_hashes = only_informative_kmers(ref_to_hashes, max_sample);
             #pragma omp master
             cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
 
