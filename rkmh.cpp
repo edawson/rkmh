@@ -221,8 +221,10 @@ int main(int argc, char** argv){
     }
 
         if (sketch_size > 0){
+            errtre << "Making reference sketches..." << endl;
             #pragma omp master
-            cerr << "Making reference sketches..." << endl;
+            cerr << errtre.str();
+            errtre.str("");
 
             //#pragma omp parallel for schedule(dynamic)
             #pragma omp for
@@ -230,10 +232,12 @@ int main(int argc, char** argv){
                 ref_to_hashes[ref_seq[i].first] = minhash_64_fast(ref_seq[i].second, kmer, sketch_size, true);
             }
             
-            //only_informative_kmers(map<string, vector<int64_t> > name_to_hashes, int max_samples) 
-           ref_to_hashes = only_informative_kmers(ref_to_hashes, max_sample);
-            #pragma omp master
-            cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
+           //only_informative_kmers(map<string, vector<int64_t> > name_to_hashes, int max_samples) 
+            #pragma omp single
+            {
+                ref_to_hashes = only_informative_kmers(ref_to_hashes, max_sample);
+                cerr << "Processed " << ref_to_hashes.size() << " references to MinHashes" << endl;
+            }
 
             //#pragma omp parallel for schedule(dynamic)
             #pragma omp for
@@ -278,12 +282,12 @@ int main(int argc, char** argv){
             }
 
             errtre << "Processed " << ref_heaps.size() << " references to kmers." << endl;
-#pragma omp master
+            #pragma omp master
             cerr << errtre;
 
             //vector<pair<string, priority_queue<string> > > p_read_heaps(readheap.begin(), readheap.end());
             vector<pair<string, priority_queue<string> > > p_ref_heaps(ref_heaps.begin(), ref_heaps.end());
-#pragma omp for
+            #pragma omp for
             for (int i = 0; i < read_seq.size(); i++){
 
                 stringstream outre;
