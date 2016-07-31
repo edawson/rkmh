@@ -27,6 +27,17 @@ inline map<string, vector<string> > make_kmer_to_samples(map<string, vector<stri
     return ret;
 };
 
+/**
+inline map<int64_t, int> pos_to_depth(string ref, vector<string> read_mers){
+
+};
+**/
+
+
+/**
+ vector<string> right_kmers(ref_kmers, read_kmers / sequence);
+ * **/
+
 inline map<int64_t, int> make_kmer_to_sample_count(vector<pair<string, vector<int64_t> > > name_to_hashes){
     map<int64_t, int> ret;
     map<int64_t, set<string> > helper;
