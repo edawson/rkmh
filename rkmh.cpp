@@ -283,7 +283,7 @@ int main(int argc, char** argv){
 
             errtre << "Processed " << ref_heaps.size() << " references to kmers." << endl;
             #pragma omp master
-            cerr << errtre;
+            cerr << errtre.str();
 
             //vector<pair<string, priority_queue<string> > > p_read_heaps(readheap.begin(), readheap.end());
             vector<pair<string, priority_queue<string> > > p_ref_heaps(ref_heaps.begin(), ref_heaps.end());
