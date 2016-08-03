@@ -48,18 +48,18 @@ int main(int argc, char** argv){
 
     stringstream errtre;
     map<string, string> ref_to_seq;
-    map<string, vector<int64_t> > ref_to_hashes;
+    map<string, vector<hash_t> > ref_to_hashes;
     map<string, vector<string> > ref_to_kmers;
 
     map<string, string> read_to_seq;
-    map<string, vector<int64_t> > read_to_hashes;
+    map<string, vector<hash_t> > read_to_hashes;
     map<string, vector<string> > read_to_kmers;
 
     unordered_map<string, int> kmer_to_depth;
-    unordered_map<int64_t, int> hash_to_depth;
+    unordered_map<hash_t, int> hash_to_depth;
     hash_to_depth.reserve(10000000);
 
-    //int64_t d_arr [INT64_MAX]; array is too large
+    //hash_t d_arr [INT64_MAX]; array is too large
 
 
     int c;
@@ -195,9 +195,9 @@ int main(int argc, char** argv){
             #pragma omp for
             for (int i = 0; i < read_seq.size(); i++){
                 pair<string, string> n_to_s = read_seq[i];
-                //vector<int64_t> rhash = allhash_unsorted_64(n_to_s.second, kmer);
+                //vector<hash_t> rhash = allhash_unsorted_64(n_to_s.second, kmer);
                 const char* x = n_to_s.second.c_str();
-                vector<int64_t> rhash = allhash_unsorted_64_fast(x, kmer);
+                vector<hash_t> rhash = allhash_unsorted_64_fast(x, kmer);
                 //#pragma omp atomic read
                 read_to_hashes[n_to_s.first] = rhash;
                 //#pragma omp critical
@@ -232,7 +232,7 @@ int main(int argc, char** argv){
                 ref_to_hashes[ref_seq[i].first] = minhash_64_fast(ref_seq[i].second, kmer, sketch_size, true);
             }
             
-           //only_informative_kmers(map<string, vector<int64_t> > name_to_hashes, int max_samples) 
+           //only_informative_kmers(map<string, vector<hash_t> > name_to_hashes, int max_samples) 
             #pragma omp single
             {
                 ref_to_hashes = only_informative_kmers(ref_to_hashes, max_sample);
@@ -243,7 +243,7 @@ int main(int argc, char** argv){
             #pragma omp for
             for (int i = 0; i < read_seq.size(); i++){
                 stringstream outre;
-                vector<int64_t> hashes;
+                vector<hash_t> hashes;
                 if (min_kmer_occ > 0){
                     hashes = minhash_64_depth_filter(read_to_hashes[read_seq[i].first], sketch_size, true, min_kmer_occ, hash_to_depth);
                 }
