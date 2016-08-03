@@ -28,7 +28,7 @@ inline map<string, vector<string> > make_kmer_to_samples(map<string, vector<stri
 };
 
 /**
-inline map<int64_t, int> pos_to_depth(string ref, vector<string> read_mers){
+inline map<hash_t, int> pos_to_depth(string ref, vector<string> read_mers){
 
 };
 **/
@@ -38,9 +38,9 @@ inline map<int64_t, int> pos_to_depth(string ref, vector<string> read_mers){
  vector<string> right_kmers(ref_kmers, read_kmers / sequence);
  * **/
 
-inline map<int64_t, int> make_kmer_to_sample_count(vector<pair<string, vector<int64_t> > > name_to_hashes){
-    map<int64_t, int> ret;
-    map<int64_t, set<string> > helper;
+inline map<hash_t, int> make_kmer_to_sample_count(vector<pair<string, vector<hash_t> > > name_to_hashes){
+    map<hash_t, int> ret;
+    map<hash_t, set<string> > helper;
     for (int i = 0; i < name_to_hashes.size(); i++){
         for (int j = 0; j < name_to_hashes[i].second.size(); j++){
             helper[name_to_hashes[i].second[j]].insert(name_to_hashes[i].first);
@@ -54,10 +54,10 @@ inline map<int64_t, int> make_kmer_to_sample_count(vector<pair<string, vector<in
 
 };
 
-inline map<string, vector<int64_t> > only_informative_kmers(map<string, vector<int64_t> >& name_to_hashes, int max_samples){
-    auto vv_count = vector<pair<string, vector<int64_t> > > (name_to_hashes.begin(), name_to_hashes.end());
-    map<int64_t, int> hash_to_count = make_kmer_to_sample_count(vv_count);
-    map<string, vector<int64_t> > ret;
+inline map<string, vector<hash_t> > only_informative_kmers(map<string, vector<hash_t> >& name_to_hashes, int max_samples){
+    auto vv_count = vector<pair<string, vector<hash_t> > > (name_to_hashes.begin(), name_to_hashes.end());
+    map<hash_t, int> hash_to_count = make_kmer_to_sample_count(vv_count);
+    map<string, vector<hash_t> > ret;
     for (auto x : name_to_hashes){
         for (int i = 0; i < x.second.size(); i++){
             if (hash_to_count[x.second[i]] < max_samples){
@@ -115,7 +115,7 @@ inline tuple<string, int, int> kmer_heap_classify(priority_queue<string> readmer
     return std::make_tuple(sample, shared_intersection, total_union); 
 };
 
-inline tuple<string, int, int, bool> classify(vector<int64_t>& read_hashes, vector<int>& ref_counts, vector<pair<string, vector<int64_t> > >& ref_hashes, int min_diff){
+inline tuple<string, int, int, bool> classify(vector<hash_t>& read_hashes, vector<int>& ref_counts, vector<pair<string, vector<hash_t> > >& ref_hashes, int min_diff){
     vector<int>::iterator max_iter = max_element(ref_counts.begin(), ref_counts.end());
     int max_val = int(*max_iter);
     int max_index = distance(ref_counts.begin(), max_iter);
@@ -130,12 +130,12 @@ inline tuple<string, int, int, bool> classify(vector<int64_t>& read_hashes, vect
 
 }
 
-inline vector<int> all_count(vector<int64_t> read_hashes, vector<pair<string, vector<int64_t> > >& ref_to_hashes){
+inline vector<int> all_count(vector<hash_t> read_hashes, vector<pair<string, vector<hash_t> > >& ref_to_hashes){
      //Parallel compare through the map would be really nice...
     vector<int> ret(ref_to_hashes.size(), 0);
     #pragma omp parallel for
     for (int i = 0; i < ref_to_hashes.size(); i++){
-         vector<int64_t> matches = hash_intersection(read_hashes, ref_to_hashes[i].second);
+         vector<hash_t> matches = hash_intersection(read_hashes, ref_to_hashes[i].second);
          ret[i] = matches.size();
     }
     return ret;
@@ -144,15 +144,15 @@ inline vector<int> all_count(vector<int64_t> read_hashes, vector<pair<string, ve
 
 
 
-inline tuple<string, int, int> classify_and_count(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
+inline tuple<string, int, int> classify_and_count(vector<hash_t>& read_hashes, map<string, vector<hash_t> >& ref_to_hashes){
      //Parallel compare through the map would be really nice...
     int max_shared = 0;
     string sample = "";
     int shared_intersection = 0;
     int total_union = 0;
-    map<string, vector<int64_t> >::iterator iter;
+    map<string, vector<hash_t> >::iterator iter;
     for (iter = ref_to_hashes.begin(); iter != ref_to_hashes.end(); iter++){
-         vector<int64_t> matches = hash_intersection(read_hashes, iter->second);
+         vector<hash_t> matches = hash_intersection(read_hashes, iter->second);
          //cerr << "MATCHES: " << matches.size() << endl;
          if (matches.size() > max_shared){
             max_shared = matches.size();
@@ -167,16 +167,16 @@ inline tuple<string, int, int> classify_and_count(vector<int64_t>& read_hashes, 
 };
 
 
-inline tuple<string, int, int> p_classify_and_count(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
+inline tuple<string, int, int> p_classify_and_count(vector<hash_t>& read_hashes, map<string, vector<hash_t> >& ref_to_hashes){
      //Parallel compare through the map would be really nice...
     int max_shared = 0;
     string sample = "";
     int shared_intersection = 0;
     int total_union = 0;
-    vector<pair<string, vector<int64_t> > > ref_pairs(ref_to_hashes.begin(), ref_to_hashes.end());
+    vector<pair<string, vector<hash_t> > > ref_pairs(ref_to_hashes.begin(), ref_to_hashes.end());
     #pragma omp parallel for
     for (int i = 0; i < ref_pairs.size(); i++){
-         vector<int64_t> matches = hash_intersection(read_hashes, ref_pairs[i].second);
+         vector<hash_t> matches = hash_intersection(read_hashes, ref_pairs[i].second);
          #pragma omp critical
          {
          if (matches.size() > max_shared){
@@ -210,7 +210,7 @@ inline tuple<string, int, int> kmer_classify(vector<string>& readmers, map<strin
      return std::make_tuple(sample, inter, uni);
 };
 
-inline vector<int> all_hash_compare(vector<int64_t>& hashes, vector<pair<string, vector<int64_t> > >& ref_hashes){
+inline vector<int> all_hash_compare(vector<hash_t>& hashes, vector<pair<string, vector<hash_t> > >& ref_hashes){
     vector<int> ret(ref_hashes.size(), 0);
     #pragma omp for
     for (int i = 0; i < ret.size(); i++){
@@ -221,14 +221,14 @@ inline vector<int> all_hash_compare(vector<int64_t>& hashes, vector<pair<string,
     
 };
 
-inline string classify(vector<int64_t>& read_hashes, map<string, vector<int64_t> >& ref_to_hashes){
+inline string classify(vector<hash_t>& read_hashes, map<string, vector<hash_t> >& ref_to_hashes){
 
     //Parallel compare through the map would be really nice...
     int max_shared = 0;
     string ret = "";
-    map<string, vector<int64_t> >::iterator iter;
+    map<string, vector<hash_t> >::iterator iter;
     for (iter = ref_to_hashes.begin(); iter != ref_to_hashes.end(); iter++){
-         vector<int64_t> matches = hash_intersection(read_hashes, iter->second);
+         vector<hash_t> matches = hash_intersection(read_hashes, iter->second);
          if (matches.size() > max_shared){
             ret = iter->first;
             max_shared = matches.size();

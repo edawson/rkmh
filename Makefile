@@ -11,11 +11,12 @@ endif
 LD_INC_FLAGS:= -Imkmh -I. -Imkmh/murmur3 -Ikseq
 LD_LIB_FLAGS:= -Lmkmh/murmur3 -Lmkmh -lmkmh -lz -lmurmur3
 
+rkmh: rkmh.cpp equiv.hpp mkmh/libmkmh.a
+	$(CXX) $(CXXFLAGS) -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
+
 dev: mkmh_dev.cpp equiv.hpp mkmh/libmkmh.a
 	$(CXX) $(CXXFLAGS) -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
-rkmh: rkmh.cpp equiv.hpp mkmh/libmkmh.a
-	$(CXX) $(CXXFLAGS) -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
 mkmh/libmkmh.a: mkmh/mkmh.cpp mkmh/mkmh.hpp
 	cd mkmh && $(MAKE) clean && $(MAKE)
