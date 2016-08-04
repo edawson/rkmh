@@ -42,6 +42,14 @@ KSEQ_INIT(gzFile, gzread)
      *
      * ./rkmh call
      * same as classify
+     * kmer size: k
+     * readfile: f
+     * ref file: r
+     * min_inform: I
+     * min diff: D
+     * kmer_occ: M
+     * outfile: o
+     * precalc: p
      * minimum depth: -d
      */
 
@@ -61,6 +69,21 @@ KSEQ_INIT(gzFile, gzread)
     }
 
 
+/**
+ *
+ *     * ./rkmh call
+     * same as classify
+     * kmer size: k
+     * readfile: f
+     * ref file: r
+     * min_inform: I
+     * min diff: D
+     * kmer_occ: M
+     * outfile: o
+     * precalc: p
+     * minimum depth: -d
+     *
+ */
 int main_call(unordered_map<string, const char*>& ref_to_seq,
                 unordered_map<string, const char*>& read_to_seq,
                 unordered_map<string, int>& read_to_num_hashes,
@@ -75,6 +98,10 @@ int main_call(unordered_map<string, const char*>& ref_to_seq,
     return 0;
 }
 
+
+/**
+ *
+ */
 int main_hash(unordered_map<string, const char*>& name_to_seq,
                 unordered_map<string, int>& name_to_num_hashes,
                 unordered_map<string, hash_t*>& name_to_hashes,
@@ -84,7 +111,14 @@ int main_hash(unordered_map<string, const char*>& name_to_seq,
     return 0;
 }
 
-int main_classify(){
+
+/**
+ *
+ */
+
+int main_classify(int argc, char* argv,
+                    unordered_map<string, hash_t*> read_to_hashes,
+                    unordered_map<string, hash_t*> ref_to_hashes){
     return 0;
 }
 
@@ -105,7 +139,7 @@ int main(int argc, char** argv){
 
     unordered_map<string, hash_t* > read_to_hashes;
     unordered_map<string, int> read_to_num_hashes;
-    unordered_map<string, const char*> read_to_seq;
+    unordered_map<string, char*> read_to_seq;
     unordered_map<string, int> read_to_length;
     map<string, vector<hash_t> > read_to_mins;
 
@@ -114,7 +148,7 @@ int main(int argc, char** argv){
 
     map<string, hash_t*> ref_to_hashes;
     map<string, int> ref_to_num_hashes;
-    map<string, const char*> ref_to_seq;
+    map<string, char*> ref_to_seq;
     map<string, int> ref_to_length;
     map<string, vector<hash_t> > ref_to_mins;
 
@@ -206,6 +240,7 @@ int main(int argc, char** argv){
     int l;
 
     //map<string, std::tuple<char*, int> > name_to_seq_len;
+    char* uppered;
 
     if (ref_files.size() > 0){
         for (auto f : ref_files){
@@ -213,13 +248,26 @@ int main(int argc, char** argv){
             seq = kseq_init(fp);
             // Read in reads, cluster, spit it back out
             while ((l = kseq_read(seq)) >= 0) {
-                ref_to_seq[seq->name.s] = to_upper(seq->seq.s, seq->seq.l);
+                to_upper(seq->seq.s, seq->seq.l);
+
+                char * x = new char[seq->seq.l];
+                memcpy(x, seq->seq.s, seq->seq.l);
+                ref_to_seq[string(seq->name.s)] = x; 
                 ref_to_length[seq->name.s] = seq->seq.l;
             } 
+            gzclose(fp);
         }
+    //for (auto x : ref_to_seq){
+    //    cout << x.first << endl << x.second << endl;
+    //}
+    //exit(1);
+
 
         cerr << "Loaded " << ref_to_seq.size() << " reference sequences." << endl;
     }
+
+
+
     else{
         cerr << "Please provide a fasta file containing references." << endl;
         exit(1);
@@ -231,9 +279,14 @@ int main(int argc, char** argv){
             fp = gzopen(f, "r");
             seq = kseq_init(fp);
             while ((l = kseq_read(seq)) >= 0) {
-                read_to_seq[seq->name.s] = to_upper(seq->seq.s, seq->seq.l);
+                to_upper(seq->seq.s, seq->seq.l);
+
+                char * x = new char[seq->seq.l];
+                memcpy(x, seq->seq.s, seq->seq.l);
+                read_to_seq[string(seq->name.s)] = x; 
                 read_to_length[seq->name.s] = seq->seq.l;
             }
+            gzclose(fp);
         }
 
         errtre << "Loaded " << read_to_seq.size() << " reads." << endl;
@@ -257,13 +310,12 @@ int main(int argc, char** argv){
     vector<pair<string, const char* > > read_seq(read_to_seq.begin(), read_to_seq.end());
     vector<pair<string, const char* > > ref_seq(ref_to_seq.begin(), ref_to_seq.end());
 
-    // TODO we need a map<ref, map<hash, pos> > to keep track of ordered depth information.
-    // or we could track hash: depth, since we know the position already based on the pointers.
 
     #pragma omp parallel
     {
         #pragma omp for
         for (int i = 0; i < ref_seq.size(); i++){
+
             tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(ref_seq[i].second, ref_to_length[ref_seq[i].first], kmer);
             hash_t* hashes = std::get<0>(hashes_and_num);
             int num_hashes = std::get<1>(hashes_and_num);
@@ -271,17 +323,33 @@ int main(int argc, char** argv){
             ref_to_hashes[ref_seq[i].first] =  hashes;
             ref_to_num_hashes[ref_seq[i].first] = num_hashes;
 
-            /*
-            for (int j = 0; j < num_hashes; j++){
-                hash_t hash_rk = hashes[j];
-                #pragma omp atomic update
-                ref_hash_to_depth[hash_rk] ++;
-            }
-            */
-
             vector<hash_t> x = minhashes(hashes, num_hashes, sketch_size);
             ref_to_mins[ref_seq[i].first] = x;
         }
+
+        #pragma omp master
+        {
+        errtre << "Hashed " << ref_to_hashes.size() << " references." << endl;
+        cerr << errtre.str();
+        errtre.str("");
+        }
+
+        if (max_samples < 1000000){
+            #pragma omp master
+            cerr << "Filtering common kmers in references..." << endl;
+
+            map<string, vector<hash_t> > informs = only_informative_kmers(ref_to_hashes, ref_to_num_hashes, max_samples);
+            for (int i = 0; i < ref_seq.size(); i++){
+                ref_to_mins[ref_seq[i].first] = minhashes(&(informs[ref_seq[i].first]).front(), informs[ref_seq[i].first].size(), sketch_size);
+            }
+            // set ref_to_hashes to a new value
+            // set ref_to_num_hashes to a new value
+            // need a only_informative_kmers(hash_t*, int hash_num, int max_sample) function
+        }
+
+
+        #pragma omp master
+        cerr << "Hashing reads..." << endl;
 
         #pragma omp for
         for (int i = 0; i < read_seq.size(); i++){
@@ -292,20 +360,23 @@ int main(int argc, char** argv){
             read_to_hashes[read_seq[i].first] = hashes;
             read_to_num_hashes[read_seq[i].first] = num_hashes;
 
+            //if (i == 7){
+            //for (int xx = 0; xx < num_hashes; xx++){
+            //    cout << strlen(read_to_seq[read_seq[i].first]) << endl << read_to_hashes[read_seq[i].first][xx] << endl;
+            //} exit(1);
+           // }
+
+
             if (min_kmer_occ > 0){
                 for (int j = 0; j < num_hashes; j++){
-                    //hash_t hashk = *(hashes + j);
                     #pragma omp atomic update
                     read_hash_to_depth[ hashes[j] ] ++;
                 }
             }
         }
 
-        if (max_samples < 1000000){
-            // set ref_to_hashes to a new value
-            // set ref_to_num_hashes to a new value
-            // need a only_informative_kmers(hash_t*, int hash_num, int max_sample) function
-        }
+        #pragma omp master
+        cerr << "Classifying reads..." << endl;
 
         #pragma omp for
         for (int i = 0; i < read_seq.size(); i++){
@@ -316,10 +387,47 @@ int main(int argc, char** argv){
             int hash_len = read_to_num_hashes[read_seq[i].first];
 
             vector<hash_t> mins;
+            mins.reserve(sketch_size);
             if (min_kmer_occ > 0){
+                #pragma omp critical
+                {
+
+                sort(hashes, hashes + hash_len);
+
+                int ret_ind;
+                while (hashes[ret_ind] == 0){
+                    ret_ind++;
+                }
+                int hashmax = sketch_size + ret_ind < hash_len ? sketch_size + ret_ind : hash_len - 1;
+
+                        for (int j = ret_ind; j < hash_len; j++){
+                        if (mins.size() >= hashmax){
+                            break;
+                        }
+
+                    if (read_hash_to_depth[hashes[j]] > min_kmer_occ){
+                        mins.push_back(hashes[j]);
+                    }
+                }
+                }
+
 
             }
+
+
             else{
+                
+                /**sort(hashes, hashes + hash_len);
+
+ 
+                int ret_ind;
+                while (hashes[ret_ind] == 0){
+                    ret_ind++;
+                }
+                int hashmax = sketch_size + ret_ind < hash_len ? sketch_size + ret_ind : hash_len - 1;
+               
+                mins = vector<hash_t>(hashes + ret_ind, hashes + hashmax);
+**/
                 mins = minhashes(hashes, hash_len, sketch_size);
             }
             tuple<string, int, int> result;
@@ -341,12 +449,15 @@ int main(int argc, char** argv){
 
     for (auto x : read_to_hashes){
         delete [] x.second;
-        //delete [] read_to_seq[x.first];
+        delete [] read_to_seq[x.first];
     }
     for (auto y : ref_to_hashes){
         delete [] y.second;
-        //delete [] read_to_seq[y.first];
+        delete [] ref_to_seq[y.first];
     }
+
+    #pragma omp master
+    cerr << "Done." << endl;
 
     // Make read and ref hashes
     //

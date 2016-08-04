@@ -37,6 +37,26 @@ inline map<hash_t, int> pos_to_depth(string ref, vector<string> read_mers){
 /**
  vector<string> right_kmers(ref_kmers, read_kmers / sequence);
  * **/
+inline map<hash_t, int> make_kmer_to_sample_count(map<string, hash_t*> name_to_hashes, map<string, int> name_to_num_hashes){
+    map<hash_t, int> ret;
+    map<hash_t, set<string> > helper;
+    vector<pair<string, hash_t*> >  vp_name_hashes(name_to_hashes.begin(), name_to_hashes.end());
+    #pragma omp for
+    for (int i = 0; i < vp_name_hashes.size(); i++){
+        for (int j = 0; j < name_to_num_hashes[vp_name_hashes[i].first]; j++){
+            helper[vp_name_hashes[i].second[j]].insert(vp_name_hashes[i].first);
+        }
+    }
+
+    for (auto x : helper){
+        ret[x.first] = x.second.size();
+    }
+
+
+    return ret;
+
+};
+
 
 inline map<hash_t, int> make_kmer_to_sample_count(vector<pair<string, vector<hash_t> > > name_to_hashes){
     map<hash_t, int> ret;
@@ -50,6 +70,22 @@ inline map<hash_t, int> make_kmer_to_sample_count(vector<pair<string, vector<has
     for (auto x : helper){
         ret[x.first] = x.second.size();
     }
+    return ret;
+
+};
+
+inline map<string, vector<hash_t>> only_informative_kmers(map<string, hash_t*> name_to_hashes, map<string, int> name_to_num_hashes, int max_samples){
+    map<hash_t, int> hash_to_sample_count = make_kmer_to_sample_count(name_to_hashes, name_to_num_hashes);
+
+    map<string, vector<hash_t> > ret;
+    for (auto x : name_to_hashes){
+        for (int i = 0; i < name_to_num_hashes[x.first]; i++){
+            if (hash_to_sample_count[x.second[i]] < max_samples){
+                ret[x.first].push_back(x.second[i]);
+            }
+        }
+    }
+
     return ret;
 
 };
