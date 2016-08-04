@@ -33,10 +33,16 @@ KSEQ_INIT(gzFile, gzread)
      * min informative: I
      * pre-calculated hashes: p
      * call differing variants: c
+     *
      * ./rkmh hash
+     * sketch size: -s
+     * min_kmer_occ: -M
+     * min_samples: -I
+     * input: -f
      *
      * ./rkmh call
-     *
+     * same as classify
+     * minimum depth: -d
      */
 
     void print_help(char** argv){
@@ -53,6 +59,34 @@ KSEQ_INIT(gzFile, gzread)
             << "--min-informative/-I <MAXSAMPLES> only use kmers present in fewer than MAXSAMPLES" << endl
             << endl;
     }
+
+
+int main_call(unordered_map<string, const char*>& ref_to_seq,
+                unordered_map<string, const char*>& read_to_seq,
+                unordered_map<string, int>& read_to_num_hashes,
+                unordered_map<string, int>& ref_to_num_hashes,
+                unordered_map<string, hash_t*>& read_to_hashes,
+                unordered_map<string, hash_t*>& ref_to_hashes,
+                map<hash_t, int>& read_hash_to_depth,
+                map<string, string>& read_to_ref
+                ){
+
+
+    return 0;
+}
+
+int main_hash(unordered_map<string, const char*>& name_to_seq,
+                unordered_map<string, int>& name_to_num_hashes,
+                unordered_map<string, hash_t*>& name_to_hashes,
+                map<hash_t, int>& hash_to_depth
+                ){
+
+    return 0;
+}
+
+int main_classify(){
+    return 0;
+}
 
 
 int main(int argc, char** argv){
@@ -89,7 +123,8 @@ int main(int argc, char** argv){
     unordered_map<string, unordered_map<int, hash_t> > ref_to_pos_to_depth;
 
     bool do_call = false;
-    unordered_map<string, unordered_map<int, string> > ref_to_pos_to_call;
+    bool do_hash = false;
+    bool do_classify = true;
 
     //hash_t d_arr [INT64_MAX]; array is too large
 
@@ -213,12 +248,17 @@ int main(int argc, char** argv){
 
     if (kmer.size() < 1){
         #pragma omp master
+        {
         cerr << "No kmer size provided. The default of 16 will be used." << endl;
         kmer.push_back(16);
+        }
     }
 
     vector<pair<string, const char* > > read_seq(read_to_seq.begin(), read_to_seq.end());
     vector<pair<string, const char* > > ref_seq(ref_to_seq.begin(), ref_to_seq.end());
+
+    // TODO we need a map<ref, map<hash, pos> > to keep track of ordered depth information.
+    // or we could track hash: depth, since we know the position already based on the pointers.
 
     #pragma omp parallel
     {
@@ -230,6 +270,14 @@ int main(int argc, char** argv){
 
             ref_to_hashes[ref_seq[i].first] =  hashes;
             ref_to_num_hashes[ref_seq[i].first] = num_hashes;
+
+            /*
+            for (int j = 0; j < num_hashes; j++){
+                hash_t hash_rk = hashes[j];
+                #pragma omp atomic update
+                ref_hash_to_depth[hash_rk] ++;
+            }
+            */
 
             vector<hash_t> x = minhashes(hashes, num_hashes, sketch_size);
             ref_to_mins[ref_seq[i].first] = x;
@@ -244,12 +292,11 @@ int main(int argc, char** argv){
             read_to_hashes[read_seq[i].first] = hashes;
             read_to_num_hashes[read_seq[i].first] = num_hashes;
 
-
             if (min_kmer_occ > 0){
                 for (int j = 0; j < num_hashes; j++){
-                    hash_t hashk = hashes[j];
+                    //hash_t hashk = *(hashes + j);
                     #pragma omp atomic update
-                    read_hash_to_depth[hashk]++;
+                    read_hash_to_depth[ hashes[j] ] ++;
                 }
             }
         }
@@ -294,9 +341,11 @@ int main(int argc, char** argv){
 
     for (auto x : read_to_hashes){
         delete [] x.second;
+        //delete [] read_to_seq[x.first];
     }
     for (auto y : ref_to_hashes){
         delete [] y.second;
+        //delete [] read_to_seq[y.first];
     }
 
     // Make read and ref hashes
