@@ -142,7 +142,7 @@ void hash_sequences(vector<string>& keys,
     vector<char*>& seqs,
     vector<int>& lengths,
     vector<hash_t*>& hashes,
-    vector<int>& hash_lengths;
+    vector<int>& hash_lengths,
     unordered_map<hash_t, int>& read_hash_to_depth,
     unordered_map<hash_t, int>& ref_to_sample_depth,
     bool doReadDepth,
@@ -270,6 +270,8 @@ int main_classify(int argc, char** argv){
 
     unordered_map<hash_t, int> read_hash_to_depth;
     unordered_map<hash_t, int> ref_hash_to_num_samples;
+
+    vector<int> kmer;
 
     int sketch_size = -1;
     int threads = 1;
