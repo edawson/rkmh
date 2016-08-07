@@ -68,57 +68,293 @@ KSEQ_INIT(gzFile, gzread)
             << endl;
     }
 
+void parse_fastas(vector<char*>& files,
+        unordered_map<string, char*>& ret_to_seq,
+        unordered_map<string, int>& ret_to_len){
+
+    /*
+    gzFile fp;
+    kseq_t *seq;
+    int l;
+    */
+
+    for (auto f : files){
+        gzFile fp;
+        kseq_t *seq;
+        int l;
+        fp = gzopen(f, "r");
+        seq = kseq_init(fp);
+        // Read in reads, cluster, spit it back out
+        while ((l = kseq_read(seq)) >= 0) {
+            to_upper(seq->seq.s, seq->seq.l);
+
+            char * x = new char[seq->seq.l];
+            memcpy(x, seq->seq.s, seq->seq.l);
+            ret_to_seq[string(seq->name.s)] = x; 
+            ret_to_len[seq->name.s] = seq->seq.l;
+        } 
+        gzclose(fp);
+    }
+}
+
+void parse_fastas(vector<char*>& files,
+                vector<string>& seq_keys,
+                vector<char*>& seq_seqs,
+                vector<int>& seq_lens){
+     for (int i = 0; i < files.size(); i++){
+        char* f = files[i];
+        gzFile fp;
+        kseq_t *seq;
+        int l;
+        fp = gzopen(f, "r");
+        seq = kseq_init(fp);
+        // Read in reads, cluster, spit it back out
+        while ((l = kseq_read(seq)) >= 0) {
+            to_upper(seq->seq.s, seq->seq.l);
+
+            char * x = new char[seq->seq.l];
+            memcpy(x, seq->seq.s, seq->seq.l);
+            seq_keys.push_back(seq->name.s);
+            seq_seqs.push_back(x);
+            seq_lens.push_back(seq->seq.l);
+        } 
+        gzclose(fp);
+    }       
+}
+
+void hash_sequences(vector<string>& keys,
+    unordered_map<string, char*>& name_to_seq,
+    unordered_map<string, int>& name_to_length,
+    vector<int>& kmer,
+    unordered_map<string, hash_t*>& ret_to_hashes,
+    unordered_map<string, int>& ret_to_hash_num){
+
+    #pragma omp for
+    for (int i = 0; i < keys.size(); i++){
+        tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(name_to_seq[keys[i]], name_to_length[keys[i]], kmer);
+        ret_to_hashes[keys[i]] = std::get<0>(hashes_and_num);
+        ret_to_hash_num[keys[i]] = std::get<1>(hashes_and_num);
+    }
+
+}
+
+void hash_sequences(vector<string>& keys,
+    vector<char*>& seqs,
+    vector<int>& lengths,
+    vector<hash_t*>& hashes,
+    vector<int>& hash_lengths;
+    unordered_map<hash_t, int>& read_hash_to_depth,
+    unordered_map<hash_t, int>& ref_to_sample_depth,
+    bool doReadDepth,
+    bool doReferenceDepth){
+
+    #pragma omp for
+    for (int i = 0; i < keys.size(); i++){
+        
+    }
+
+}
+
+
+
 
 /**
  *
  *     * ./rkmh call
-     * same as classify
-     * kmer size: k
+ * same as classify
+ * kmer size: k
+ * readfile: f
+ * ref file: r
+ * min_inform: I
+ * min diff: D
+ * kmer_occ: M
+ * outfile: o
+ * precalc: p
+ * minimum depth: -d
+ *
+ */
+int main_call(int argc, char* argv){
+
+    unordered_map<string, const char*> ref_to_seq;
+    unordered_map<string, const char*> read_to_seq;
+    unordered_map<string, int> read_to_num_hashes;
+    map<string, int> ref_to_num_hashes;
+    unordered_map<string, hash_t*> read_to_hashes;
+    map<string, hash_t*> ref_to_hashes;
+    unordered_map<hash_t, int> read_hash_to_depth;
+    unordered_map<string, string> read_to_ref;
+
+    // Parse CLI
+    //
+    // Generate hashes and filter
+    //
+    // Classify reads
+    //
+    // Call variants
+    //      calculate avg depth
+    //      check depth
+    //
+    //      permute ref sequence
+    //      check new depth
+    //      emit calls (if any)
+
+    return 0;
+}
+
+
+/**
+ *
+ */
+int main_hash(int argc, char* argv){
+    unordered_map<string, const char*> name_to_seq;
+    unordered_map<string, int> name_to_num_hashes;
+    unordered_map<string, hash_t*> name_to_hashes;
+    unordered_map<hash_t, int> hash_to_depth;
+
+    // Parse CLI
+    //
+    // Generate hashes, filtering if necessary
+    //
+    // Build JSON records and flush to stdout
+
+    return 0;
+}
+
+
+/**
+ *
+ * ./rkmh classify
+     * sketch size: s
+     * kmer: k
      * readfile: f
-     * ref file: r
-     * min_inform: I
+     * reference file: r
+     * thread: t
+     * min_kmer_occ: M
+     * minmatches: N
      * min diff: D
-     * kmer_occ: M
-     * outfile: o
-     * precalc: p
-     * minimum depth: -d
-     *
- */
-int main_call(unordered_map<string, const char*>& ref_to_seq,
-                unordered_map<string, const char*>& read_to_seq,
-                unordered_map<string, int>& read_to_num_hashes,
-                unordered_map<string, int>& ref_to_num_hashes,
-                unordered_map<string, hash_t*>& read_to_hashes,
-                unordered_map<string, hash_t*>& ref_to_hashes,
-                map<hash_t, int>& read_hash_to_depth,
-                map<string, string>& read_to_ref
-                ){
+     * write to outfile: o
+     * min informative: I
+     * pre-calculated hashes: p
+     * call differing variants: c
 
-
-    return 0;
-}
-
-
-/**
- *
- */
-int main_hash(unordered_map<string, const char*>& name_to_seq,
-                unordered_map<string, int>& name_to_num_hashes,
-                unordered_map<string, hash_t*>& name_to_hashes,
-                map<hash_t, int>& hash_to_depth
-                ){
-
-    return 0;
-}
-
-
-/**
- *
  */
 
-int main_classify(int argc, char* argv,
-                    unordered_map<string, hash_t*> read_to_hashes,
-                    unordered_map<string, hash_t*> ref_to_hashes){
+int main_classify(int argc, char** argv){
+   /* 
+    unordered_map<string, char*> ref_to_seq;
+    unordered_map<string, int> ref_to_len;
+    unordered_map<string, hash_t*> ref_to_hashes;
+    unordered_map<string, int> ref_to_num_hashes;
+
+    unordered_map<string, char*> read_to_seq;
+    unordered_map<string, int> read_to_len;
+    unordered_map<string, hash_t*> read_to_hashes;
+    unordered_map<string, int> ref_to_num_hashes;
+    */
+
+    vector<char*> ref_files;
+    vector<char*> read_files;
+
+    vector<string> ref_keys;
+    vector<char*> ref_seqs;
+    vector<int> ref_lens;
+    vector<hash_t*> ref_hashes;
+    vector<int> ref_hash_nums;
+
+    vector<string> read_keys;
+    vector<char*> read_seqs;
+    vector<int> read_lens;
+    vector<hash_t*> read_hashes;
+    vector<int> read_hash_nums;
+
+
+    unordered_map<hash_t, int> read_hash_to_depth;
+    unordered_map<hash_t, int> ref_hash_to_num_samples;
+
+    int sketch_size = -1;
+    int threads = 1;
+    int min_kmer_occ = 0;
+    int min_matches = -1;
+    int min_diff = 0;
+    int max_samples = 1000000;
+
+    int c;
+    int optind = 2;
+
+    if (argc <= 2){
+        print_help(argv);
+        exit(1);
+    }
+
+    while (true){
+        static struct option long_options[] =
+        {
+            {"help", no_argument, 0, 'h'},
+            {"kmer", no_argument, 0, 'k'},
+            {"fasta", required_argument, 0, 'f'},
+            {"reference", required_argument, 0, 'r'},
+            {"sketch", required_argument, 0, 's'},
+            {"threads", required_argument, 0, 't'},
+            {"min-kmer-occurence", required_argument, 0, 'M'},
+            {"min-matches", required_argument, 0, 'N'},
+            {"min-diff", required_argument, 0, 'D'},
+            {"max-samples", required_argument, 0, 'I'},
+            {0,0,0,0}
+        };
+
+        int option_index = 0;
+        c = getopt_long(argc, argv, "hk:f:r:s:t:M:N:D:I:", long_options, &option_index);
+        if (c == -1){
+            break;
+        }
+
+        switch (c){
+            case 't':
+                threads = atoi(optarg);
+                break;
+            case 'r':
+                ref_files.push_back(optarg);
+                break;
+            case 'f':
+                read_files.push_back(optarg);
+                break;
+            case 'k':
+                kmer.push_back(atoi(optarg));
+                break;
+            case '?':
+            case 'h':
+                print_help(argv);
+                exit(1);
+                break;
+            case 's':
+                sketch_size = atoi(optarg);
+                break;
+            case 'M':
+                min_kmer_occ = atoi(optarg);
+                break;
+            case 'N':
+                min_matches = atoi(optarg);
+                break;
+            case 'D':
+                min_diff = atoi(optarg);
+                break;
+            case 'I':
+                max_samples = atoi(optarg);
+                break;
+            default:
+                print_help(argv);
+                abort();
+
+        }
+    }
+
+    omp_set_num_threads(threads);
+
+
+//void parse_fastas(vector<char*> files, vector<string>& seq_keys, vector<char*>& seq_seqs, vector<int>& seq_lens)
+    parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
+    parse_fastas(read_files, read_keys, read_seqs, read_lens);
+
     return 0;
 }
 
@@ -141,15 +377,15 @@ int main(int argc, char** argv){
     unordered_map<string, int> read_to_num_hashes;
     unordered_map<string, char*> read_to_seq;
     unordered_map<string, int> read_to_length;
-    map<string, vector<hash_t> > read_to_mins;
+    unordered_map<string, vector<hash_t> > read_to_mins;
 
-    map<hash_t, int> read_hash_to_depth;
+    unordered_map<hash_t, int> read_hash_to_depth;
 
 
     map<string, hash_t*> ref_to_hashes;
     map<string, int> ref_to_num_hashes;
-    map<string, char*> ref_to_seq;
-    map<string, int> ref_to_length;
+    unordered_map<string, char*> ref_to_seq;
+    unordered_map<string, int> ref_to_length;
     map<string, vector<hash_t> > ref_to_mins;
 
     unordered_map<hash_t, int> ref_hash_to_depth;
@@ -239,7 +475,6 @@ int main(int argc, char** argv){
     kseq_t *seq;
     int l;
 
-    //map<string, std::tuple<char*, int> > name_to_seq_len;
     char* uppered;
 
     if (ref_files.size() > 0){
@@ -257,11 +492,6 @@ int main(int argc, char** argv){
             } 
             gzclose(fp);
         }
-    //for (auto x : ref_to_seq){
-    //    cout << x.first << endl << x.second << endl;
-    //}
-    //exit(1);
-
 
         cerr << "Loaded " << ref_to_seq.size() << " reference sequences." << endl;
     }
@@ -289,10 +519,8 @@ int main(int argc, char** argv){
             gzclose(fp);
         }
 
-        errtre << "Loaded " << read_to_seq.size() << " reads." << endl;
-
-        cerr << errtre.str(); //<< "Loaded " << read_to_seq.size() << " reads." << endl;
-        errtre.str("");
+#pragma omp master
+        cerr << "Loaded " << read_to_seq.size() << " reads." << endl;
     }
     else{
         cerr << "Please provide a read file containing query sequences." << endl;
@@ -300,10 +528,10 @@ int main(int argc, char** argv){
     }
 
     if (kmer.size() < 1){
-        #pragma omp master
+#pragma omp master
         {
-        cerr << "No kmer size provided. The default of 16 will be used." << endl;
-        kmer.push_back(16);
+            cerr << "No kmer size provided. The default of 16 will be used." << endl;
+            kmer.push_back(16);
         }
     }
 
@@ -311,9 +539,9 @@ int main(int argc, char** argv){
     vector<pair<string, const char* > > ref_seq(ref_to_seq.begin(), ref_to_seq.end());
 
 
-    #pragma omp parallel
+#pragma omp parallel
     {
-        #pragma omp for
+#pragma omp for
         for (int i = 0; i < ref_seq.size(); i++){
 
             tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(ref_seq[i].second, ref_to_length[ref_seq[i].first], kmer);
@@ -327,20 +555,21 @@ int main(int argc, char** argv){
             ref_to_mins[ref_seq[i].first] = x;
         }
 
-        #pragma omp master
+#pragma omp master
         {
-        errtre << "Hashed " << ref_to_hashes.size() << " references." << endl;
-        cerr << errtre.str();
-        errtre.str("");
+            errtre << "Hashed " << ref_to_hashes.size() << " references." << endl;
+            cerr << errtre.str();
+            errtre.str("");
         }
 
         if (max_samples < 1000000){
-            #pragma omp master
+#pragma omp master
             cerr << "Filtering common kmers in references..." << endl;
 
             map<string, vector<hash_t> > informs = only_informative_kmers(ref_to_hashes, ref_to_num_hashes, max_samples);
             for (int i = 0; i < ref_seq.size(); i++){
-                ref_to_mins[ref_seq[i].first] = minhashes(&(informs[ref_seq[i].first]).front(), informs[ref_seq[i].first].size(), sketch_size);
+                vector<hash_t> mins = minhashes(&(informs[ref_seq[i].first]).front(), informs[ref_seq[i].first].size(), sketch_size);
+                ref_to_mins[ref_seq[i].first] = mins;
             }
             // set ref_to_hashes to a new value
             // set ref_to_num_hashes to a new value
@@ -348,10 +577,10 @@ int main(int argc, char** argv){
         }
 
 
-        #pragma omp master
+#pragma omp master
         cerr << "Hashing reads..." << endl;
 
-        #pragma omp for
+#pragma omp for
         for (int i = 0; i < read_seq.size(); i++){
             tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(read_seq[i].second, read_to_length[read_seq[i].first], kmer);
             hash_t* hashes = std::get<0>(hashes_and_num);
@@ -360,27 +589,22 @@ int main(int argc, char** argv){
             read_to_hashes[read_seq[i].first] = hashes;
             read_to_num_hashes[read_seq[i].first] = num_hashes;
 
-            //if (i == 7){
-            //for (int xx = 0; xx < num_hashes; xx++){
-            //    cout << strlen(read_to_seq[read_seq[i].first]) << endl << read_to_hashes[read_seq[i].first][xx] << endl;
-            //} exit(1);
-           // }
-
-
             if (min_kmer_occ > 0){
-                for (int j = 0; j < num_hashes; j++){
-                    #pragma omp atomic update
-                    read_hash_to_depth[ hashes[j] ] ++;
+
+#pragma omp critical
+                {
+                    for (int j = 0; j < num_hashes; j++){
+                        read_hash_to_depth[ hashes[j] ] ++;
+                    }
                 }
             }
         }
 
-        #pragma omp master
+#pragma omp master
         cerr << "Classifying reads..." << endl;
 
-        #pragma omp for
+#pragma omp for
         for (int i = 0; i < read_seq.size(); i++){
-            // need a minhash_64_depth_filter(hash_t* hash, int hash_num, int sketch_size, map<read_hash_to_depth>, int maxDepth) function
             stringstream outre;
 
             hash_t* hashes = read_to_hashes[read_seq[i].first];
@@ -389,26 +613,26 @@ int main(int argc, char** argv){
             vector<hash_t> mins;
             mins.reserve(sketch_size);
             if (min_kmer_occ > 0){
-                #pragma omp critical
+#pragma omp critical
                 {
 
-                sort(hashes, hashes + hash_len);
+                    sort(hashes, hashes + hash_len);
 
-                int ret_ind;
-                while (hashes[ret_ind] == 0){
-                    ret_ind++;
-                }
-                int hashmax = sketch_size + ret_ind < hash_len ? sketch_size + ret_ind : hash_len - 1;
+                    int ret_ind;
+                    while (hashes[ret_ind] == 0){
+                        ret_ind++;
+                    }
+                    int hashmax = sketch_size + ret_ind < hash_len ? sketch_size + ret_ind : hash_len - 1;
 
-                        for (int j = ret_ind; j < hash_len; j++){
-                        if (mins.size() >= hashmax){
+                    for (int j = 0; j < hash_len; j++){
+                        if (mins.size() == hashmax ){
                             break;
                         }
 
-                    if (read_hash_to_depth[hashes[j]] > min_kmer_occ){
-                        mins.push_back(hashes[j]);
+                        if (read_hash_to_depth[hashes[j]] >= min_kmer_occ && hashes[j] != 0){
+                            mins.push_back(hashes[j]);
+                        }
                     }
-                }
                 }
 
 
@@ -416,18 +640,18 @@ int main(int argc, char** argv){
 
 
             else{
-                
+
                 /**sort(hashes, hashes + hash_len);
 
- 
-                int ret_ind;
-                while (hashes[ret_ind] == 0){
-                    ret_ind++;
-                }
-                int hashmax = sketch_size + ret_ind < hash_len ? sketch_size + ret_ind : hash_len - 1;
-               
-                mins = vector<hash_t>(hashes + ret_ind, hashes + hashmax);
-**/
+
+                  int ret_ind;
+                  while (hashes[ret_ind] == 0){
+                  ret_ind++;
+                  }
+                  int hashmax = sketch_size + ret_ind < hash_len ? sketch_size + ret_ind : hash_len - 1;
+
+                  mins = vector<hash_t>(hashes + ret_ind, hashes + hashmax);
+                 **/
                 mins = minhashes(hashes, hash_len, sketch_size);
             }
             tuple<string, int, int> result;
@@ -445,7 +669,26 @@ int main(int argc, char** argv){
         }
 
     }
+    
+    /*
+    if (argc == 1){
 
+    }
+
+    string command = argv[1];
+    if (command == "classify"){
+
+    }
+    else if (command == "call"){
+
+    }
+    else if (command == "hash"){
+
+    }
+    else{
+
+    }
+    */
 
     for (auto x : read_to_hashes){
         delete [] x.second;
@@ -456,27 +699,13 @@ int main(int argc, char** argv){
         delete [] ref_to_seq[y.first];
     }
 
-    #pragma omp master
+#pragma omp master
     cerr << "Done." << endl;
-
-    // Make read and ref hashes
-    //
-    // make kmer to depth for reads
-    //
-    // make ref_only_informative kmers
-    //
-    // make minhash sketches
-    //
-    // compare and classify
-    //
-    // call
-
-
 
     kseq_destroy(seq);
     gzclose(fp);
 
 
 
-    return 1;
+    return 0;
 }
