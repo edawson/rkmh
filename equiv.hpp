@@ -178,6 +178,23 @@ inline vector<int> all_count(vector<hash_t> read_hashes, vector<pair<string, vec
     //return std::make_tuple(sample, shared_intersection, total_union);   
 };
 
+inline tuple<string, int, int> classify_and_count(vector<hash_t>& read_mins, vector<string> ref_keys, vector<vector<hash_t> > ref_mins){
+    int max_shared = 0;
+    string sample = "";
+    int shared_inter = 0;
+    int total_union = 0;
+    
+    for (int i = 0; i < ref_mins.size(); i++){
+        vector<hash_t> matches = hash_intersection(read_mins, ref_mins[i]);
+        if (matches.size() > max_shared){
+            max_shared = matches.size();
+            sample = ref_keys[i];
+            shared_inter = matches.size();
+            total_union = read_mins.size() < ref_mins[i].size() ? read_mins.size() : ref_mins[i].size();
+        }
+    }
+    return std::make_tuple(sample, shared_inter, total_union);
+};
 
 
 inline tuple<string, int, int> classify_and_count(vector<hash_t>& read_hashes, map<string, vector<hash_t> >& ref_to_hashes){
