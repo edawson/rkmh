@@ -103,10 +103,11 @@ void parse_fastas(vector<char*>& files,
                 vector<string>& seq_keys,
                 vector<char*>& seq_seqs,
                 vector<int>& seq_lens){
+
+    kseq_t *seq;
      for (int i = 0; i < files.size(); i++){
         char* f = files[i];
         gzFile fp;
-        kseq_t *seq;
         int l;
         fp = gzopen(f, "r");
         seq = kseq_init(fp);
@@ -121,7 +122,8 @@ void parse_fastas(vector<char*>& files,
             seq_lens.push_back(seq->seq.l);
         } 
         gzclose(fp);
-    }       
+    }   
+    kseq_destroy(seq);
 }
 
 void hash_sequences(vector<string>& keys,
@@ -155,7 +157,7 @@ void hash_sequences(vector<string>& keys,
     bool doReadDepth,
     bool doReferenceDepth){
 
-    #pragma omp for
+    #pragma omp parallel for
     for (int i = 0; i < keys.size(); i++){
         // Hash sequence
         tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seqs[i], lengths[i], kmer);
@@ -165,7 +167,7 @@ void hash_sequences(vector<string>& keys,
             #pragma omp critical
             {
             for (int j = 0; j < hash_lengths[i]; j++){
-                //#pragma omp atomic update
+                #pragma omp atomic update
                 read_hash_to_depth[hashes[i][j]] ++;
             }
             }
@@ -321,7 +323,7 @@ int main_call(int argc, char** argv){
 
 
 
-#pragma omp parallel
+//#pragma omp parallel
 {
     
     #pragma omp master
@@ -358,7 +360,7 @@ int main_call(int argc, char** argv){
                     ref_hash_to_num_samples,
                     (min_kmer_occ > 0),
                     (max_samples < 10000));
-
+    #pragma omp master
     cerr << " Done." << endl;
     vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
 
@@ -591,7 +593,7 @@ int main_hash(int argc, char** argv){
                     ref_hash_to_num_samples,
                     (min_kmer_occ > 0),
                     (max_samples < 10000));
-
+    #pragma omp master
     cerr << " Done." << endl;
     vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
 
@@ -743,7 +745,7 @@ int main_classify(int argc, char** argv){
 
 
 
-#pragma omp parallel
+//#pragma omp parallel
 {
     
     #pragma omp master
@@ -767,7 +769,7 @@ int main_classify(int argc, char** argv){
                   ref_hashes, ref_hash_nums, kmer,
                   read_hash_to_depth,
                   ref_hash_to_num_samples,
-                  (min_kmer_occ > 0),
+                  false,
                   (max_samples < 10000));
 #pragma omp master
     cerr << " Done." << endl;
@@ -779,11 +781,11 @@ int main_classify(int argc, char** argv){
                     read_hash_to_depth,
                     ref_hash_to_num_samples,
                     (min_kmer_occ > 0),
-                    (max_samples < 10000));
-
+                    false);
+    #pragma omp master
     cerr << " Done." << endl;
     vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
-    #pragma omp for
+    #pragma omp parallel for
     for (int i = 0; i < ref_keys.size(); i++){
         vector<hash_t> x;
         std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
@@ -822,8 +824,8 @@ int main_classify(int argc, char** argv){
 
     }
 
-#pragma omp for
-    for (int i = 0; i < read_seqs.size(); i++){
+    #pragma omp parallel for
+    for (int i = 0; i < read_keys.size(); i++){
         hash_t* hh = read_hashes[i];
         int hh_l = read_hash_nums[i];
         
@@ -832,9 +834,10 @@ int main_classify(int argc, char** argv){
         // compare / classify / print to cout
 
             stringstream outre;
+
+            sort(hh, hh + hh_l);
             vector<hash_t> mins;
             if (min_kmer_occ > 0){
-                    sort(hh, hh + hh_l);
                     int ret_ind;
                     while (hh[ret_ind] == 0){
                         ret_ind++;
