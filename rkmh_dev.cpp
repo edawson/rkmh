@@ -70,6 +70,39 @@ KSEQ_INIT(gzFile, gzread)
             << endl;
     }
 
+    void help_classify(char** argv){
+        cerr << "Usage: " << argv[0] << " classify [options]" << endl
+            << "Options:" << endl
+            << "--reference/-r   <REF>" << endl
+            << "--fasta/-f   <FASTAFILE>" << endl
+            << "--kmer/-k    <KMERSIZE>" << endl
+            << "--sketch-size/-s <SKETCHSIZE>" << endl
+            << "--threads/-t <THREADS>" << endl
+            << "--min-kmer-occurence/-M <MINOCCURENCE>" << endl
+            << "--min-matches/-N <MINMATCHES>" << endl
+            << "--min-diff/-D    <MINDIFFERENCE>" << endl
+            << "--min-informative/-I <MAXSAMPLES> only use kmers present in fewer than MAXSAMPLES" << endl
+            << endl;
+    }
+
+    void help_call(char** argv){
+        cerr << "Usage: " << argv[0] << " call [options]" << endl
+            << "Options:" << endl
+            << "--reference/-r <REF> reference genomes in fasta format." << endl
+            << "--fasta/-f <FASTA>   a fasta file to call mutations in relative to the reference." << endl
+            << "--threads/-t    the number of OpenMP threads to utilize." << endl
+            << endl;
+    }
+
+    void help_hash(char** argv){
+        cerr << "Usage: " << argv[0] << " hash [options]" << endl
+            << "Options:" << endl
+            << "--fasta/-f  <FASTA> fasta file to hash." << endl
+            << "--reference/-r  <REF> reference file to hash." << endl
+            << "--sketch-size/-s <SKETCHSIZE>   sketch size." << endl
+            << "--threads/-t    <THREADS>   number of OpenMP threads to utilize." << endl;
+    }
+
 void parse_fastas(vector<char*>& files,
         unordered_map<string, char*>& ret_to_seq,
         unordered_map<string, int>& ret_to_len){
@@ -188,6 +221,11 @@ void hash_sequences(vector<string>& keys,
 
 }
 
+   void dump_hashes(vector<string> keys,
+           vector<hash_t> mins){
+
+   }
+
 
 
 
@@ -229,7 +267,7 @@ int main_call(int argc, char** argv){
     int optind = 2;
 
     if (argc <= 2){
-        print_help(argv);
+        help_call(argv);
         exit(1);
     }
 
@@ -295,6 +333,18 @@ int main_call(int argc, char** argv){
         }
     }
 
+    if (kmer.size() == 0){
+
+    }
+
+    if (ref_files.size() == 0 && read_files.size() == 0){
+
+    }
+
+    if (sketch_size > 0){
+
+    }
+
     omp_set_num_threads(threads);
 
     vector<string> ref_keys;
@@ -312,9 +362,13 @@ int main_call(int argc, char** argv){
 
     #pragma omp master
     cerr << "Parsing sequences...";
-    parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
-    parse_fastas(read_files, read_keys, read_seqs, read_lens);
-    
+    if (ref_files.size() > 0){
+        parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
+    }
+    if (read_files.size() > 0){
+        parse_fastas(read_files, read_keys, read_seqs, read_lens);
+    }
+
     vector<hash_t*> ref_hashes(ref_keys.size());
     vector<int> ref_hash_nums(ref_keys.size());
 
@@ -340,29 +394,34 @@ int main_call(int argc, char** argv){
     bool doReadDepth,
     bool doReferenceDepth){
      */
-   
-#pragma omp master
-    cerr << "Hashing references... ";
-    hash_sequences(ref_keys, ref_seqs, ref_lens,
+
+    if (ref_files.size() > 0){
+        #pragma omp master
+        cerr << "Hashing references... ";
+        hash_sequences(ref_keys, ref_seqs, ref_lens,
                   ref_hashes, ref_hash_nums, kmer,
                   read_hash_to_depth,
                   ref_hash_to_num_samples,
-                  (min_kmer_occ > 0),
+                  false,
                   (max_samples < 10000));
-#pragma omp master
-    cerr << " Done." << endl;
+        #pragma omp master
+        cerr << " Done." << endl;
+    }
 
-#pragma omp master
-    cerr << "Hashing reads... ";
-    hash_sequences(read_keys, read_seqs, read_lens,
+
+    if (read_files.size() > 0){
+        #pragma omp master
+        cerr << "Hashing reads... ";
+        hash_sequences(read_keys, read_seqs, read_lens,
                     read_hashes, read_hash_nums, kmer,
                     read_hash_to_depth,
                     ref_hash_to_num_samples,
-                    (min_kmer_occ > 0),
-                    (max_samples < 10000));
-    #pragma omp master
-    cerr << " Done." << endl;
-    vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
+                    true,
+                    false);
+
+        #pragma omp master
+        cerr << " Done." << endl;
+    }
 
     /**
      *
@@ -385,24 +444,33 @@ int main_call(int argc, char** argv){
      * }
      */
     list<int> d_window;
-    auto avg = [](list<int> n_list){
+    auto avg = [](vector<int> n_list){
         int ret = 0;
-        //for (int x = 0; x < n_list.size(); x++){
-        //    ret += ;
-        //}
-        return (double) ret / (double) n_list.size();
+        for (int x = 0; x < n_list.size(); x++){
+            ret += n_list.at(x);
+        }
+        //return (double) ret / (double) n_list.size();
+        return 3;
     };
     #pragma omp for
     for (int i = 0; i < ref_keys.size(); i++){
+        stringstream outre;
+        outre << ref_keys[i] << endl;
+        cout << outre.str(); outre.str("");
+
         for (int j = 0; j < ref_hash_nums[i]; j++){
             int depth = read_hash_to_depth[ref_hashes[i][j]];
             d_window.push_back(depth);
-            if (d_window.size() > 5){
+            if (d_window.size() > 10){
                 d_window.pop_front();
             }
-            if (depth < .5 * avg(d_window)){
+            //if (depth < .5 * avg(vector<int>(d_window.begin(), d_window.end()))){
+                //cout << "Low Depth: " << string(ref_seqs[i] + j, 12) << " " << depth << endl;
 
-            }
+            //}
+            //else {
+                cout << "Kmer " << string(ref_seqs[i] + j, 12) << " " << depth << endl;
+            //}
 
         }
         
@@ -473,7 +541,7 @@ int main_hash(int argc, char** argv){
     int optind = 2;
 
     if (argc <= 2){
-        print_help(argv);
+        help_hash(argv);
         exit(1);
     }
 
@@ -908,10 +976,10 @@ int main(int argc, char** argv){
         return main_classify(argc, argv);
     }
     else if (cmd == "hash"){
-
+        return main_hash(argc, argv);
     }
     else if (cmd == "call"){
-
+        return main_call(argc, argv);
     }
 
     vector<char*> ref_files;
