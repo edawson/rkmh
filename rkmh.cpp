@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <functional>
 #include <vector>
 #include<set>
 #include <cstdint>
@@ -190,7 +191,7 @@ void hash_sequences(vector<string>& keys,
         hashes[i] = std::get<0>(hashes_and_num);
         hash_lengths[i] = std::get<1>(hashes_and_num);
         if (doReadDepth){
-            //#pragma omp critical
+            #pragma omp critical
             {
                 for (int j = 0; j < hash_lengths[i]; j++){
                     #pragma omp atomic update
@@ -993,17 +994,8 @@ int main_call(int argc, char** argv){
                         }
                     }
 
-                    //map<string, vector<hash_t> > informs = only_informative_kmers(ref_to_hashes, ref_to_num_hashes, max_samples);
-                    //for (int i = 0; i < ref_seq.size(); i++){
-                    //    vector<hash_t> mins = minhashes(&(informs[ref_seq[i].first]).front(), informs[ref_seq[i].first].size(), sketch_size);
-                    //    ref_to_mins[ref_seq[i].first] = mins;
-                    //}
-                    // set ref_to_hashes to a new value
-                    // set ref_to_num_hashes to a new value
-                    // need a only_informative_kmers(hash_t*, int hash_num, int max_sample) function
-                }
+                                    }
                 else{
-                    //x = minhashes(ref_hashes[i], ref_hash_nums[i], sketch_size);
 
                       int ret_ind;
                       while (ref_hashes[ret_ind] == 0){
@@ -1012,7 +1004,6 @@ int main_call(int argc, char** argv){
                       int hashmax = sketch_size + ret_ind < ref_hash_nums[i] ? sketch_size + ret_ind : ref_hash_nums[i] - 1;
 
                       ref_mins[i] = vector<hash_t>(ref_hashes[i] + ret_ind, ref_hashes[i] + hashmax);
-                    //ref_mins[i] = x;
                 }
 
 
@@ -1076,6 +1067,7 @@ int main_call(int argc, char** argv){
 
                 //#pragma omp critical
                 //cout << outre.str();
+                #pragma omp critical
                 s_buf[i] = outre.str();
                 outre.str("");
 
