@@ -14,10 +14,6 @@ LD_LIB_FLAGS:= -Lmkmh/murmur3 -Lmkmh -lmkmh -lz -lmurmur3
 rkmh: rkmh.cpp equiv.hpp mkmh/libmkmh.a
 	$(CXX) $(CXXFLAGS) -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
-dev: rkmh_dev.cpp equiv.hpp mkmh/libmkmh.a
-	$(CXX) $(CXXFLAGS) -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
-
-
 mkmh/libmkmh.a: mkmh/mkmh.cpp mkmh/mkmh.hpp
 	cd mkmh && $(MAKE) clean && $(MAKE)
 
