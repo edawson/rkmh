@@ -931,8 +931,8 @@ int main_call(int argc, char** argv){
         vector<int> read_hash_nums(read_keys.size());
 
 
-        vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
 
+        vector<vector<hash_t> > ref_mins(ref_keys.size());
         vector<string> s_buf(read_keys.size(), "");
 
         #pragma omp parallel
@@ -1002,7 +1002,7 @@ int main_call(int argc, char** argv){
                       ret_ind++;
                       }
                       int hashmax = sketch_size + ret_ind < ref_hash_nums[i] ? sketch_size + ret_ind : ref_hash_nums[i] - 1;
-
+                      #pragma omp critical
                       ref_mins[i] = vector<hash_t>(ref_hashes[i] + ret_ind, ref_hashes[i] + hashmax);
                 }
 
