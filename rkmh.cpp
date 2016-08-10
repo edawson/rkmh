@@ -869,7 +869,18 @@ int main_call(int argc, char** argv){
             }
         }
 
-        omp_set_num_threads(threads);
+        if (sketch_size == -1){
+            cerr << "Sketch size unset." << endl
+                << "Will use the default sketch size of n = 1000" << endl;
+            sketch_size = 1000;
+        }
+
+        if (kmer.size() == 0){
+            cerr << "No kmer size(s) provided. Will use a default kmer size of 16." << endl;
+            kmer.push_back(16);
+        }
+
+                omp_set_num_threads(threads);
 
         vector<string> ref_keys;
         ref_keys.reserve(500);
@@ -885,12 +896,30 @@ int main_call(int argc, char** argv){
         vector<int> read_lens;
         read_lens.reserve(2000);
 
-#pragma omp master
+        #pragma omp master
         cerr << "Parsing sequences...";
-        parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
-        parse_fastas(read_files, read_keys, read_seqs, read_lens);
 
-#pragma omp master
+        if (ref_files.size() >= 1){
+            parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
+        }
+        else{
+            cerr << "No references were provided. Please provide at least one reference file in fasta/fastq format." << endl;
+            help_classify(argv);
+            exit(1);
+        }
+
+        if (read_files.size() >= 1){
+            parse_fastas(read_files, read_keys, read_seqs, read_lens);
+        }
+        else{
+            cerr << "No reads were provided. Please provide at least one read file in fasta/fastq format." << endl;
+            help_classify(argv);
+            exit(1);
+        }
+
+
+
+        #pragma omp master
         cerr << " Done." << endl <<
             ref_keys.size() << " references and " << read_keys.size() << " reads parsed." << endl;
 
@@ -905,7 +934,7 @@ int main_call(int argc, char** argv){
 
         vector<string> s_buf(read_keys.size(), "");
 
-#pragma omp parallel
+        #pragma omp parallel
         {
 
             /*
@@ -920,7 +949,7 @@ int main_call(int argc, char** argv){
              bool doReferenceDepth){
              */
 
-#pragma omp master
+            #pragma omp master
             cerr << "Hashing references... ";
             hash_sequences(ref_keys, ref_seqs, ref_lens,
                     ref_hashes, ref_hash_nums, kmer,
@@ -928,10 +957,10 @@ int main_call(int argc, char** argv){
                     ref_hash_to_num_samples,
                     false,
                     (max_samples < 10000));
-#pragma omp master
+            #pragma omp master
             cerr << " Done." << endl;
 
-#pragma omp master
+            #pragma omp master
             cerr << "Hashing reads... ";
             hash_sequences(read_keys, read_seqs, read_lens,
                     read_hashes, read_hash_nums, kmer,
@@ -939,11 +968,11 @@ int main_call(int argc, char** argv){
                     ref_hash_to_num_samples,
                     (min_kmer_occ > 0),
                     false);
-#pragma omp master
+            #pragma omp master
             cerr << " Done." << endl;
 
 
-#pragma omp for
+            #pragma omp for
             for (int i = 0; i < ref_keys.size(); i++){
                 vector<hash_t> x;
                 std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
@@ -974,8 +1003,16 @@ int main_call(int argc, char** argv){
                     // need a only_informative_kmers(hash_t*, int hash_num, int max_sample) function
                 }
                 else{
-                    x = minhashes(ref_hashes[i], ref_hash_nums[i], sketch_size);
-                    ref_mins[i] = x;
+                    //x = minhashes(ref_hashes[i], ref_hash_nums[i], sketch_size);
+
+                      int ret_ind;
+                      while (ref_hashes[ret_ind] == 0){
+                      ret_ind++;
+                      }
+                      int hashmax = sketch_size + ret_ind < ref_hash_nums[i] ? sketch_size + ret_ind : ref_hash_nums[i] - 1;
+
+                      ref_mins[i] = vector<hash_t>(ref_hashes[i] + ret_ind, ref_hashes[i] + hashmax);
+                    //ref_mins[i] = x;
                 }
 
 
@@ -983,7 +1020,10 @@ int main_call(int argc, char** argv){
             }
 
 
-#pragma omp for
+            #pragma omp master
+            cerr << "Mins generated for references" << endl;
+
+            #pragma omp for
             for (int i = 0; i < read_keys.size(); i++){
                 hash_t* hh = read_hashes[i];
                 int hh_l = read_hash_nums[i];
