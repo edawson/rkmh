@@ -591,7 +591,7 @@ int main_call(int argc, char** argv){
                             int alt_depth = read_hash_to_depth[calc_hash(alt)];
 
                             if (alt_depth > .9 * avg_d){
-                                int pos = j + alt_pos;
+                                int pos = j + alt_pos + 1;
                                 outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
                                 outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt << endl;
                             }
@@ -645,7 +645,7 @@ int main_call(int argc, char** argv){
 
                                 int alt_depth_pre = read_hash_to_depth[calc_hash(alt_pre)];
                                 if (alt_depth_pre > .9 * avg_d){
-                                    int pos = j + alt_pos;
+                                    int pos = j + alt_pos + 1;
                                     outre << "CALL: " << orig << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth_pre << endl;
                                     outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt_out.str() << endl;
                                 }
@@ -655,7 +655,7 @@ int main_call(int argc, char** argv){
 
                                 int alt_depth_post = read_hash_to_depth[calc_hash(alt_post)];
                                 if (alt_depth_post > .9 * avg_d){
-                                    int pos = j + alt_pos;
+                                    int pos = j + alt_pos + 1;
                                     outre << "CALL: " << orig << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth_post << endl;
                                     outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt_out.str() << endl;
                                 }
