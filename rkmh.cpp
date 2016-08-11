@@ -202,10 +202,10 @@ void hash_sequences(vector<string>& keys,
         else if (doReferenceDepth){
             // create the set of hashes in the sample
             set<hash_t> sample_set (hashes[i], hashes[i] + hash_lengths[i]);
-            #pragma omp critical
+            //#pragma omp critical
             {
                 for (auto x : sample_set){
-                    //#pragma omp atomic update 
+                    #pragma omp atomic update 
                     ref_to_sample_depth[x] ++;
                 }
             }
@@ -312,12 +312,6 @@ int main_call(int argc, char** argv){
                 break;
             case 'M':
                 min_kmer_occ = atoi(optarg);
-                break;
-            case 'N':
-                min_matches = atoi(optarg);
-                break;
-            case 'D':
-                min_diff = atoi(optarg);
                 break;
             case 'I':
                 max_samples = atoi(optarg);
@@ -542,7 +536,12 @@ int main_call(int argc, char** argv){
                 if (d_window.size() > window_len){
                     d_window.pop_front();
                 }
-                outre << j << "\t" << avg(vector<int>(d_window.begin(), d_window.end())) << endl;
+                //outre << j << "\t" << avg(vector<int>(d_window.begin(), d_window.end())) << endl;
+                if (depth < .5 * avg(vector<int>(d_window.begin(), d_window.end()))){
+                    
+                }
+
+
                 s_buf[i] = outre.str();
                 outre.str("");
                 //if (depth < .5 * avg(vector<int>(d_window.begin(), d_window.end()))){
@@ -933,23 +932,10 @@ int main_call(int argc, char** argv){
 
         vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
 
-        vector<string> s_buf(read_keys.size(), "");
+        vector<string> s_buf(read_keys.size());
 
         #pragma omp parallel
         {
-
-            /*
-             *void hash_sequences(vector<string>& keys,
-             vector<char*>& seqs,
-             vector<int>& lengths,
-             vector<hash_t*>& hashes,
-             vector<int>& hash_lengths,
-             unordered_map<hash_t, int>& read_hash_to_depth,
-             unordered_map<hash_t, int>& ref_to_sample_depth,
-             bool doReadDepth,
-             bool doReferenceDepth){
-             */
-
             #pragma omp master
             cerr << "Hashing references... ";
             hash_sequences(ref_keys, ref_seqs, ref_lens,
@@ -980,7 +966,6 @@ int main_call(int argc, char** argv){
                 if (max_samples < 10000){
                     for (int j = 0; j < ref_hash_nums[i]; j++){
                         if (x.size() >= sketch_size){
-                            ref_mins[i] = x;
                             break;
                         }
                         if (ref_hashes[i][j] == 0){
@@ -994,17 +979,12 @@ int main_call(int argc, char** argv){
                         }
                     }
 
-                                    }
-                else{
-
-                      int ret_ind;
-                      while (ref_hashes[ret_ind] == 0){
-                      ret_ind++;
-                      }
-                      int hashmax = sketch_size + ret_ind < ref_hash_nums[i] ? sketch_size + ret_ind : ref_hash_nums[i] - 1;
-
-                      ref_mins[i] = vector<hash_t>(ref_hashes[i] + ret_ind, ref_hashes[i] + hashmax);
                 }
+                else{
+                    x = minhashes(ref_hashes[i], ref_hash_nums[i], sketch_size);
+                }
+
+                ref_mins[i] = x;
 
 
 
@@ -1040,19 +1020,7 @@ int main_call(int argc, char** argv){
                     }
                 }
                 else{
-
-                    /**sort(hashes, hashes + hash_len);
-                        **/
-
-                      int ret_ind;
-                      while (hh[ret_ind] == 0){
-                      ret_ind++;
-                      }
-                      int hashmax = sketch_size + ret_ind < hh_l ? sketch_size + ret_ind : hh_l - 1;
-
-                      mins = vector<hash_t>(hh + ret_ind, hh + hashmax);
-                     //**/
-                    //mins = minhashes(hh, hh_l, sketch_size);
+                    mins = minhashes(hh, hh_l, sketch_size);
                 }
                 tuple<string, int, int> result;
                 result = classify_and_count(mins, ref_keys, ref_mins);

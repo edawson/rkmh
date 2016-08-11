@@ -24,31 +24,29 @@ This should build rkmh and its library dependencies (mkmh and murmur3).
 rkmh required a set of reads and a set of references in the FASTA/FASTQ format. Reads need not
 be in FASTQ format.
 
-To classify reads by kmers of length 10:  
-```./rkmh -f references.fa -r reads.fq -k 10```
 
 To do the same, but use a MinHash sketch of size 1000 instead of just comparing kmers:  
-```./rkmh -f references.fa -r reads.fq -k 10 -m 1000```
+```./rkmh -r references.fa -f reads.fq -k 10 -s 1000```
 
 There's also now a filter for minimum kmer occurrence in a read set, compatible with the MinHash sketch.
 To only use kmers that occur more than 10 times in the reads:  
-```./rkmh -f references.fa -r reads.fq -k 10 -m 1000 -D 100```
+```./rkmh -f references.fa -r reads.fq -k 10 -m 1000 -M 100```
 
 There is also a filter that will fail reads with fewer than some number of matches to any reference.
 It's availble via the `-P` flag:  
-```./rkmh -f references.fa -r reads.fq -k 10 -m 1000 -D 100 -S 10```
+```./rkmh -f references.fa -r reads.fq -k 10 -s 1000 -M 100 -N 10```
 
 ### Other options
 ```-t / --threads               number of OpenMP threads to use (default is 1)```  
-```-D / --min-kmer-occurence    minimum number of times a kmer must appear in the set of reads to be included in a read's MinHash sketch.```  
-```-S / --min-matches           minimum number of matches a read must have to any reference to be considered classified.```  
+```-M / --min-kmer-occurence    minimum number of times a kmer must appear in the set of reads to be included in a read's MinHash sketch.```  
+```-N / --min-matches           minimum number of matches a read must have to any reference to be considered classified.```  
 
 ### Performance
 On a set of 1000 minION reads from a known HPV strain, rkmh is ~97% accurate (correctly placing the read in the right strain
-of 182 input reference strains) and runs in <30 seconds. With the kmer depth and minimum match filters we're approaching >99% accuracy for about the same run time.
+of 182 input reference strains) and runs in <20 seconds. With the kmer depth and minimum match filters we're approaching 100% accuracy for about the same run time.
 We're working on ways to improve sensitivity with further filtering and correction.
 
-rkmh is threaded using OpenMP but the code should be considered minimally tuned. Hashing can handle around 250 reads/second and kmer comparison around 40 reads / second.
+rkmh is threaded using OpenMP but the code should be considered minimally tuned. Hashing can handle around 250 reads/second (250 * 7kb means we're running over 1,500,000 basepairs / second).
 
 ### Getting help
 Please post to the [github](https://github.com/edawson/rkmh.git) for help.
