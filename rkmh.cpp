@@ -195,7 +195,7 @@ void hash_sequences(vector<string>& keys,
             #pragma omp critical
             {
                 for (int j = 0; j < hash_lengths[i]; j++){
-                    //#pragma omp atomic
+                    #pragma omp atomic
                     read_hash_to_depth[hashes[i][j]] ++;
                 }
             }
@@ -206,7 +206,7 @@ void hash_sequences(vector<string>& keys,
             #pragma omp critical
             {
                 for (auto x : sample_set){
-                    //#pragma omp atomic
+                    #pragma omp atomic
                     ref_to_sample_depth[x] ++;
                 }
             }
@@ -1022,7 +1022,7 @@ int main_call(int argc, char** argv){
 
                 //#pragma omp critical
                 //cout << outre.str();
-                #pragma omp critical
+                //#pragma omp critical
                 s_buf[i] = outre.str();
                 outre.str("");
 
