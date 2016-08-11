@@ -82,9 +82,10 @@ void help_classify(char** argv){
 void help_call(char** argv){
     cerr << "Usage: " << argv[0] << " call [options]" << endl
         << "Options:" << endl
-        << "--reference/-r <REF> reference genomes in fasta format." << endl
-        << "--fasta/-f <FASTA>   a fasta file to call mutations in relative to the reference." << endl
-        << "--threads/-t    the number of OpenMP threads to utilize." << endl
+        << "--reference/-r <REF>      reference genomes in fasta format." << endl
+        << "--fasta/-f <FASTA>        a fasta file to call mutations in relative to the reference." << endl
+        << "--threads/-t <THREADS>    the number of OpenMP threads to utilize." << endl
+        << "--window-len/-w <WINLEN>  the width of the sliding window to use for calculating average depth." << endl
         << endl;
 }
 
@@ -160,7 +161,7 @@ void hash_sequences(vector<string>& keys,
         unordered_map<string, hash_t*>& ret_to_hashes,
         unordered_map<string, int>& ret_to_hash_num){
 
-    #pragma omp for
+    #pragma omp parallel for
     for (int i = 0; i < keys.size(); i++){
         tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(name_to_seq[keys[i]], name_to_length[keys[i]], kmer);
         ret_to_hashes[keys[i]] = std::get<0>(hashes_and_num);
@@ -184,7 +185,7 @@ void hash_sequences(vector<string>& keys,
         bool doReadDepth,
         bool doReferenceDepth){
 
-    #pragma omp for
+    #pragma omp parallel for
     for (int i = 0; i < keys.size(); i++){
         // Hash sequence
         tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seqs[i], lengths[i], kmer);
@@ -194,7 +195,7 @@ void hash_sequences(vector<string>& keys,
             #pragma omp critical
             {
                 for (int j = 0; j < hash_lengths[i]; j++){
-                    #pragma omp atomic update
+                    //#pragma omp atomic
                     read_hash_to_depth[hashes[i][j]] ++;
                 }
             }
@@ -202,10 +203,10 @@ void hash_sequences(vector<string>& keys,
         else if (doReferenceDepth){
             // create the set of hashes in the sample
             set<hash_t> sample_set (hashes[i], hashes[i] + hash_lengths[i]);
-            //#pragma omp critical
+            #pragma omp critical
             {
                 for (auto x : sample_set){
-                    #pragma omp atomic update 
+                    //#pragma omp atomic
                     ref_to_sample_depth[x] ++;
                 }
             }
@@ -241,12 +242,6 @@ void dump_hashes(vector<string> keys,
 int main_call(int argc, char** argv){
     vector<char*> ref_files;
     vector<char*> read_files;
-
-
-    unordered_map<hash_t, int> read_hash_to_depth;
-    read_hash_to_depth.reserve(1000000);
-    unordered_map<hash_t, int> ref_hash_to_num_samples;
-    ref_hash_to_num_samples.reserve(1000000);
 
     vector<int> kmer;
 
@@ -326,47 +321,98 @@ int main_call(int argc, char** argv){
         }
     }
 
-    if (kmer.size() == 0){
+        if (sketch_size == -1){
+            cerr << "Sketch size unset." << endl
+                << "Will use the default sketch size of n = 1000" << endl;
+            sketch_size = 1000;
+        }
 
-    }
+        if (kmer.size() == 0){
+            cerr << "No kmer size(s) provided. Will use a default kmer size of 16." << endl;
+            kmer.push_back(16);
+        }
 
-    if (ref_files.size() == 0 && read_files.size() == 0){
+        omp_set_num_threads(threads);
 
-    }
+        vector<string> ref_keys;
+        ref_keys.reserve(500);
+        vector<char*> ref_seqs;
+        ref_seqs.reserve(500);
+        vector<int> ref_lens;
+        ref_lens.reserve(500);
 
-    if (sketch_size > 0){
+        vector<string> read_keys;
+        read_keys.reserve(2000);
+        vector<char*> read_seqs;
+        read_seqs.reserve(2000);
+        vector<int> read_lens;
+        read_lens.reserve(2000);
 
-    }
+        unordered_map<hash_t, int> read_hash_to_depth;
+        read_hash_to_depth.reserve(1000000);
+        unordered_map<hash_t, int> ref_hash_to_num_samples;
+        ref_hash_to_num_samples.reserve(1000000);
 
-    omp_set_num_threads(threads);
 
-    vector<string> ref_keys;
-    ref_keys.reserve(500);
-    vector<char*> ref_seqs;
-    ref_seqs.reserve(500);
-    vector<int> ref_lens;
-    ref_lens.reserve(500);
-    vector<string> read_keys;
-    read_keys.reserve(2000);
-    vector<char*> read_seqs;
-    read_seqs.reserve(2000);
-    vector<int> read_lens;
-    read_lens.reserve(2000);
+        #pragma omp master
+        cerr << "Parsing sequences...";
 
-#pragma omp master
-    cerr << "Parsing sequences...";
-    if (ref_files.size() > 0){
-        parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
-    }
-    if (read_files.size() > 0){
-        parse_fastas(read_files, read_keys, read_seqs, read_lens);
-    }
+        if (ref_files.size() >= 1){
+            parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
+        }
+        else{
+            cerr << "No references were provided. Please provide at least one reference file in fasta/fastq format." << endl;
+            help_classify(argv);
+            exit(1);
+        }
 
-    vector<hash_t*> ref_hashes(ref_keys.size());
-    vector<int> ref_hash_nums(ref_keys.size());
+        if (read_files.size() >= 1){
+            parse_fastas(read_files, read_keys, read_seqs, read_lens);
+        }
+        else{
+            cerr << "No reads were provided. Please provide at least one read file in fasta/fastq format." << endl;
+            help_classify(argv);
+            exit(1);
+        }
 
-    vector<hash_t*> read_hashes(read_keys.size());
-    vector<int> read_hash_nums(read_keys.size());
+
+
+        #pragma omp master
+        cerr << " Done." << endl <<
+            ref_keys.size() << " references and " << read_keys.size() << " reads parsed." << endl;
+
+        vector<hash_t*> ref_hashes(ref_keys.size());
+        vector<int> ref_hash_nums(ref_keys.size());
+
+        vector<hash_t*> read_hashes(read_keys.size());
+        vector<int> read_hash_nums(read_keys.size());
+
+
+        vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
+
+        vector<string> s_buf(ref_keys.size());
+        
+        #pragma omp master
+        cerr << "Hashing references... ";
+        hash_sequences(ref_keys, ref_seqs, ref_lens,
+                    ref_hashes, ref_hash_nums, kmer,
+                    read_hash_to_depth,
+                    ref_hash_to_num_samples,
+                    false,
+                    (max_samples < 10000));
+        #pragma omp master
+        cerr << " Done." << endl;
+
+        #pragma omp master
+        cerr << "Hashing reads... ";
+        hash_sequences(read_keys, read_seqs, read_lens,
+                    read_hashes, read_hash_nums, kmer,
+                    read_hash_to_depth,
+                    ref_hash_to_num_samples,
+                    (min_kmer_occ > 0),
+                    false);
+        #pragma omp master
+        cerr << " Done." << endl;
 
     std::function<double(vector<int>)> avg = [](vector<int> n_list){
             int ret = 0;
@@ -462,64 +508,9 @@ int main_call(int argc, char** argv){
         
     };
 
-    vector<string> s_buf(ref_keys.size());
 
     #pragma omp parallel
     {
-
-    #pragma omp master
-        cerr << " Done." << endl <<
-            ref_keys.size() << " references and " << read_keys.size() << " reads parsed." << endl;
-        
-        if (ref_files.size() > 0){
-            #pragma omp master
-            cerr << "Hashing references... ";
-            hash_sequences(ref_keys, ref_seqs, ref_lens,
-                    ref_hashes, ref_hash_nums, kmer,
-                    read_hash_to_depth,
-                    ref_hash_to_num_samples,
-                    false,
-                    (max_samples < 10000));
-            #pragma omp master
-            cerr << " Done." << endl;
-        }
-
-
-        if (read_files.size() > 0){
-            #pragma omp master
-            cerr << "Hashing reads... ";
-            hash_sequences(read_keys, read_seqs, read_lens,
-                    read_hashes, read_hash_nums, kmer,
-                    read_hash_to_depth,
-                    ref_hash_to_num_samples,
-                    true,
-                    false);
-
-            #pragma omp master
-            cerr << " Done." << endl;
-        }
-
-        /**
-         *
-         * vector<char> ATGC = {'A', 'T', 'G', 'C'};
-         * while (i % 4 != y)
-         * auto permute = [](char* x, int k){
-         *
-         *  snps: switch-case
-         *  for (int i = 0; i < k; i++){
-         *      char val = x[i];
-         *      switch (val){
-         *          case 'A':
-         *          case 'a':
-         *              
-         *
-         *      }
-         *  }
-         *
-         *  indels: for loops
-         * }
-         */
-
 
         list<int> d_window;
         
@@ -784,12 +775,6 @@ int main_call(int argc, char** argv){
         vector<char*> ref_files;
         vector<char*> read_files;
 
-
-        unordered_map<hash_t, int> read_hash_to_depth;
-        read_hash_to_depth.reserve(1000000);
-        unordered_map<hash_t, int> ref_hash_to_num_samples;
-        ref_hash_to_num_samples.reserve(1000000);
-
         vector<int> kmer;
 
         int sketch_size = -1;
@@ -880,7 +865,7 @@ int main_call(int argc, char** argv){
             kmer.push_back(16);
         }
 
-                omp_set_num_threads(threads);
+        omp_set_num_threads(threads);
 
         vector<string> ref_keys;
         ref_keys.reserve(500);
@@ -895,6 +880,12 @@ int main_call(int argc, char** argv){
         read_seqs.reserve(2000);
         vector<int> read_lens;
         read_lens.reserve(2000);
+
+        unordered_map<hash_t, int> read_hash_to_depth;
+        read_hash_to_depth.reserve(10000);
+        unordered_map<hash_t, int> ref_hash_to_num_samples;
+        ref_hash_to_num_samples.reserve(10000);
+
 
         #pragma omp master
         cerr << "Parsing sequences...";
@@ -933,32 +924,32 @@ int main_call(int argc, char** argv){
         vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
 
         vector<string> s_buf(read_keys.size());
-
-        #pragma omp parallel
-        {
-            #pragma omp master
-            cerr << "Hashing references... ";
-            hash_sequences(ref_keys, ref_seqs, ref_lens,
+        
+        #pragma omp master
+        cerr << "Hashing references... ";
+        hash_sequences(ref_keys, ref_seqs, ref_lens,
                     ref_hashes, ref_hash_nums, kmer,
                     read_hash_to_depth,
                     ref_hash_to_num_samples,
                     false,
                     (max_samples < 10000));
-            #pragma omp master
-            cerr << " Done." << endl;
+        #pragma omp master
+        cerr << " Done." << endl;
 
-            #pragma omp master
-            cerr << "Hashing reads... ";
-            hash_sequences(read_keys, read_seqs, read_lens,
+        #pragma omp master
+        cerr << "Hashing reads... ";
+        hash_sequences(read_keys, read_seqs, read_lens,
                     read_hashes, read_hash_nums, kmer,
                     read_hash_to_depth,
                     ref_hash_to_num_samples,
                     (min_kmer_occ > 0),
                     false);
-            #pragma omp master
-            cerr << " Done." << endl;
+        #pragma omp master
+        cerr << " Done." << endl;
 
-
+        #pragma omp parallel
+        {
+        
             #pragma omp for
             for (int i = 0; i < ref_keys.size(); i++){
                 vector<hash_t> x;
@@ -989,10 +980,6 @@ int main_call(int argc, char** argv){
 
 
             }
-
-
-            #pragma omp master
-            cerr << "Mins generated for references" << endl;
 
             #pragma omp for
             for (int i = 0; i < read_keys.size(); i++){
