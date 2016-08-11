@@ -331,6 +331,16 @@ int main_call(int argc, char** argv){
             cerr << "No kmer size(s) provided. Will use a default kmer size of 16." << endl;
             kmer.push_back(16);
         }
+        else if (kmer.size() > 1){
+            cerr << "Only a single kmer size may be used for calling." << endl
+                << "Sizes provided: ";
+            for (auto k : kmer){
+                cerr << k << " ";
+            }
+            cerr << endl;
+            cerr << "Please choose a single kmer size." << endl;
+            exit(1);
+        }
 
         omp_set_num_threads(threads);
 
@@ -424,7 +434,8 @@ int main_call(int argc, char** argv){
 
     std::function<vector<char>(char)> rotate_snps = [](char c){
         vector<char> ret(3);
-
+        
+        // ACTG
         switch (c){
             case 'A':
             case 'a':
@@ -435,28 +446,32 @@ int main_call(int argc, char** argv){
             case 'T':
             case 't':
                 ret[0] = 'C';
-                ret[1] = 'A';
-                ret[2] = 'G';
+                ret[1] = 'G';
+                ret[2] = 'A';
                 break;
             case 'C':
             case 'c':
-                ret[0] = 'A';
-                ret[1] = 'T';
-                ret[2] = 'G';
+                ret[0] = 'T';
+                ret[1] = 'G';
+                ret[2] = 'A';
                 break;
             case 'G':
             case 'g':
                 ret[0] = 'A';
-                ret[1] = 'T';
-                ret[2] = 'C';
+                ret[1] = 'C';
+                ret[2] = 'T';
                 break;
         }
         return ret;
     };
 
     std::function<vector<string>(string)> permute = [&](string x){
+        //int k_pos;
+        //string mut;
+
         vector<string> ret;
-        // SNPs
+        //vector<tuple<string, int, string> > ret;
+        // SNPs, 3 * sequence length
         for (int i = 0; i < x.size(); i++){
             char orig = x[i];
             vector<char> other_chars = rotate_snps(x[i]);
@@ -464,9 +479,11 @@ int main_call(int argc, char** argv){
                x[i] = other_chars[j];
                ret.push_back(x);
             }
+            x[i] = orig;
         }
 
-        //DELs, 1bp
+        //DELs, 1bp, 1 * sequence length
+        // TODO probably doesn't delete the first base correctly
         for (int i = 0; i < x.size() - 1; i++){
             char orig = x[i];
             stringstream tmp;
@@ -478,7 +495,8 @@ int main_call(int argc, char** argv){
             ret.push_back(tmp.str());
         }
 
-        //DELs, 2bp
+        //DELs, 2bp, 1 * sequence length
+        // TODO probably doesn't work on first occurence correctly either
         for (int i = 0; i < x.size() - 2; i++){
             char orig = x[i];
             stringstream tmp;
@@ -490,7 +508,7 @@ int main_call(int argc, char** argv){
             ret.push_back(tmp.str());
         }
 
-        // 1bp insertions
+        // 1bp insertions, 1 * sequence length
         for (int i = 0; i < x.size(); i++){
             char orig = x[i];
             stringstream tmp;
@@ -498,6 +516,16 @@ int main_call(int argc, char** argv){
                 
             }
         }
+
+        // 2bp insertions, 1 * sequence length
+        for (int i = 0; i < x.size(); i++){
+            char orig = x[i];
+            stringstream tmp;
+            for (int strpos = 0; strpos < x.size(); strpos++){
+                
+            }
+        }
+        
         // Homopolymer extension / contraction?
 
         return ret;
@@ -506,6 +534,13 @@ int main_call(int argc, char** argv){
         vector<pair<char*, int> > ret;
         return ret;
         
+    };
+
+    std::function<string(int, int, string, int, int)> emit_call = [](int ref_pos, int k_pos, string ref, int alt_call, int depth){
+        stringstream ret;
+
+        return ret.str();
+
     };
 
 
@@ -517,23 +552,126 @@ int main_call(int argc, char** argv){
 
         #pragma omp for
         for (int i = 0; i < ref_keys.size(); i++){
+            // This loop iterates over the reference genomes.
+
             stringstream outre;
             //outre << ref_keys[i] << endl;
             //cout << outre.str(); outre.str("");
 
             for (int j = 0; j < ref_hash_nums[i]; j++){
+                // This loop iterates over a single reference genome
+                // i.e. its sequence
+               
+                // This is a hacky way of calculating depth using a sliding window.
                 int depth = read_hash_to_depth[ref_hashes[i][j]];
                 d_window.push_back(depth);
                 if (d_window.size() > window_len){
                     d_window.pop_front();
                 }
+
+                int avg_d = avg(vector<int>(d_window.begin(), d_window.end()));
+
+                // This line outputs the current avg depth at a position.
                 //outre << j << "\t" << avg(vector<int>(d_window.begin(), d_window.end())) << endl;
-                if (depth < .5 * avg(vector<int>(d_window.begin(), d_window.end()))){
-                    
-                }
+                if (depth < .5 * avg_d){
+                    //vector<string> alts = permute(string(ref_seqs[i] + j, kmer[0]));
+                    //outre << string(ref_seqs[i] + j, kmer[0]);
+                    //outre << depth;
+                    //for (int a_ind = 0; a_ind < alts.size(); a_ind++){
 
 
-                s_buf[i] = outre.str();
+                    // SNPs
+                    string ref = string(ref_seqs[i] + j, kmer[0]);
+                    string alt(ref);
+
+                    for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
+                        char orig = alt[alt_pos];
+                        for (auto x : rotate_snps(orig)){
+                            alt[alt_pos] = x;
+                            int alt_depth = read_hash_to_depth[calc_hash(alt)];
+
+                            if (alt_depth > .9 * avg_d){
+                                int pos = j + alt_pos;
+                                outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
+                                outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt << endl;
+                            }
+                            alt[alt_pos] = orig;
+                        }
+
+                    }
+
+                    for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
+                        char orig = alt[alt_pos];
+                        char hanger;
+                        bool is_end = false;
+                        bool is_begin = false;
+                        if (j < 1){
+                            is_begin = true;
+                        }
+                        else if (j == alt.size() - 1){
+                            is_end  = true;
+                        }
+                            stringstream alt_stream_pre;
+                            stringstream alt_stream_post;
+                            stringstream alt_out;
+
+                            if (!is_begin){
+                                hanger = ref_seqs[i][j - 1];
+                                alt_stream_pre << hanger;
+                            }
+                            for (int strpos = 0; strpos < alt.size() - 1; strpos++){
+                                if (strpos != alt_pos){
+                                    alt_stream_pre << alt[strpos];
+                                    alt_stream_post << alt[strpos];
+                                    alt_out << alt[strpos];
+                                }
+                                else{
+                                    alt_out << "_";
+                                }
+
+                            }
+                            if (!is_end){
+                                hanger = ref_seqs[i][j + 1];
+                                alt_stream_post << hanger;
+                            }
+
+                            string alt_post;
+                            string alt_pre;
+                            alt_pre = alt_stream_pre.str();
+                            alt_post = alt_stream_post.str();
+
+                            
+                            if (!is_begin){
+
+                                int alt_depth_pre = read_hash_to_depth[calc_hash(alt_pre)];
+                                if (alt_depth_pre > .9 * avg_d){
+                                    int pos = j + alt_pos;
+                                    outre << "CALL: " << orig << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth_pre << endl;
+                                    outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt_out.str() << endl;
+                                }
+                            }
+
+                            if (!is_end){
+
+                                int alt_depth_post = read_hash_to_depth[calc_hash(alt_post)];
+                                if (alt_depth_post > .9 * avg_d){
+                                    int pos = j + alt_pos;
+                                    outre << "CALL: " << orig << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth_post << endl;
+                                    outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt_out.str() << endl;
+                                }
+                            }
+
+                            alt = ref;
+                        }
+
+                    }
+                  
+                
+
+                //outre << endl;
+                #pragma omp critical
+                cout << outre.str();
+                //s_buf[i] = outre.str();
                 outre.str("");
                 //if (depth < .5 * avg(vector<int>(d_window.begin(), d_window.end()))){
                 //cout << "Low Depth: " << string(ref_seqs[i] + j, 12) << " " << depth << endl;
@@ -549,9 +687,9 @@ int main_call(int argc, char** argv){
 
     }
 
-    for (auto x : s_buf){
-        cout << x;
-    }
+    //for (auto x : s_buf){
+        //cout << x;
+    //}
 
     for (auto x : read_hashes){
         delete [] x;;
