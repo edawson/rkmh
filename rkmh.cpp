@@ -313,12 +313,6 @@ int main_call(int argc, char** argv){
             case 'M':
                 min_kmer_occ = atoi(optarg);
                 break;
-            case 'N':
-                min_matches = atoi(optarg);
-                break;
-            case 'D':
-                min_diff = atoi(optarg);
-                break;
             case 'I':
                 max_samples = atoi(optarg);
                 break;
@@ -543,7 +537,7 @@ int main_call(int argc, char** argv){
                     d_window.pop_front();
                 }
                 //outre << j << "\t" << avg(vector<int>(d_window.begin(), d_window.end())) << endl;
-                if (depth < .t * avg(vector<int>(d_window.begin(), d_window.end()))){
+                if (depth < .5 * avg(vector<int>(d_window.begin(), d_window.end()))){
                     
                 }
 
