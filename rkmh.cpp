@@ -82,9 +82,10 @@ void help_classify(char** argv){
 void help_call(char** argv){
     cerr << "Usage: " << argv[0] << " call [options]" << endl
         << "Options:" << endl
-        << "--reference/-r <REF> reference genomes in fasta format." << endl
-        << "--fasta/-f <FASTA>   a fasta file to call mutations in relative to the reference." << endl
-        << "--threads/-t    the number of OpenMP threads to utilize." << endl
+        << "--reference/-r <REF>      reference genomes in fasta format." << endl
+        << "--fasta/-f <FASTA>        a fasta file to call mutations in relative to the reference." << endl
+        << "--threads/-t <THREADS>    the number of OpenMP threads to utilize." << endl
+        << "--window-len/-w <WINLEN>  the width of the sliding window to use for calculating average depth." << endl
         << endl;
 }
 
@@ -389,7 +390,7 @@ int main_call(int argc, char** argv){
 
         vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
 
-        vector<string> s_buf(read_keys.size());
+        vector<string> s_buf(ref_keys.size());
         
         #pragma omp master
         cerr << "Hashing references... ";
@@ -510,60 +511,6 @@ int main_call(int argc, char** argv){
 
     #pragma omp parallel
     {
-
-    #pragma omp master
-        cerr << " Done." << endl <<
-            ref_keys.size() << " references and " << read_keys.size() << " reads parsed." << endl;
-        
-        if (ref_files.size() > 0){
-            #pragma omp master
-            cerr << "Hashing references... ";
-            hash_sequences(ref_keys, ref_seqs, ref_lens,
-                    ref_hashes, ref_hash_nums, kmer,
-                    read_hash_to_depth,
-                    ref_hash_to_num_samples,
-                    false,
-                    (max_samples < 10000));
-            #pragma omp master
-            cerr << " Done." << endl;
-        }
-
-
-        if (read_files.size() > 0){
-            #pragma omp master
-            cerr << "Hashing reads... ";
-            hash_sequences(read_keys, read_seqs, read_lens,
-                    read_hashes, read_hash_nums, kmer,
-                    read_hash_to_depth,
-                    ref_hash_to_num_samples,
-                    true,
-                    false);
-
-            #pragma omp master
-            cerr << " Done." << endl;
-        }
-
-        /**
-         *
-         * vector<char> ATGC = {'A', 'T', 'G', 'C'};
-         * while (i % 4 != y)
-         * auto permute = [](char* x, int k){
-         *
-         *  snps: switch-case
-         *  for (int i = 0; i < k; i++){
-         *      char val = x[i];
-         *      switch (val){
-         *          case 'A':
-         *          case 'a':
-         *              
-         *
-         *      }
-         *  }
-         *
-         *  indels: for loops
-         * }
-         */
-
 
         list<int> d_window;
         
