@@ -15,6 +15,10 @@
 #include "mkmh.hpp"
 #include "kseq.hpp"
 #include "equiv.hpp"
+#include "json.hpp"
+
+// for convenience
+using json = nlohmann::json;
 
 KSEQ_INIT(gzFile, gzread)
 
@@ -216,10 +220,64 @@ void hash_sequences(vector<string>& keys,
 
 }
 
-void dump_hashes(vector<string> keys,
-        vector<hash_t> mins){
+json dump_hash_json(string key, int seqlen,
+        vector<hash_t> mins,
+        vector<int> kmer, 
+        int sketch_size,
+        string alphabet = "ATGC",
+        string hash_type = "MurmurHash3_x64_128",
+        bool canonical = true,
+        int hash_bits = 64,
+        int hash_seed = 42
+        ){
+    json j;
+    j["name"] = key;
+    
+    stringstream kstr;
+    for (int i = 0; i < kmer.size(); i++){
+        kstr << kmer[i];
+        if (i < kmer.size() - 1){
+            kstr << " ";
+        }
+    }
+    j["kmer"] = kstr.str();
+    j["alphabet"] = alphabet;
+    j["preserveCase"] = "false";
+    j["canonical"] = (canonical ? "true" : "false");
+    j["hashType"] = hash_type;
+    j["hashBits"] = hash_bits;
+    j["hashSeed"] = hash_seed;
+    j["sketchSize"] = sketch_size;
+    j["sketches"] = {
+        {"name", key},
+        {"length", seqlen},
+        {"comment", ""},
+        {"hashes", mins}
+    };
 
+    return j;
 }
+
+json dump_hashes(vector<string> keys,
+                vector<int> seqlens,
+                vector<vector<hash_t> > hashes,
+                vector<int> kmer,
+                int sketch_size){
+    json j;
+    return j;
+}
+
+json dump_hashes(string key,
+                vector<int> seqlens,
+                vector<string> seqnames,
+                vector<vector<hash_t> > hashes,
+                vector<int> kmer,
+                int sketch_size){
+        json j;
+
+        return j;
+}
+
 
 
 
@@ -848,9 +906,6 @@ int main_call(int argc, char** argv){
 
 
 
-#pragma omp parallel
-        {
-
 #pragma omp master
             cerr << " Done." << endl <<
                 ref_keys.size() << " references and " << read_keys.size() << " reads parsed." << endl;
@@ -861,7 +916,7 @@ int main_call(int argc, char** argv){
                     ref_hashes, ref_hash_nums, kmer,
                     read_hash_to_depth,
                     ref_hash_to_num_samples,
-                    (min_kmer_occ > 0),
+                    false,
                     (max_samples < 10000));
 #pragma omp master
             cerr << " Done." << endl;
@@ -873,16 +928,100 @@ int main_call(int argc, char** argv){
                     read_hash_to_depth,
                     ref_hash_to_num_samples,
                     (min_kmer_occ > 0),
-                    (max_samples < 10000));
+                    false);
 #pragma omp master
             cerr << " Done." << endl;
             vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
+        #pragma omp parallel
+        {
+        
+            #pragma omp for
+            for (int i = 0; i < ref_keys.size(); i++){
+                vector<hash_t> x;
+                std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
+                if (max_samples < 10000){
+                    for (int j = 0; j < ref_hash_nums[i]; j++){
+                        if (x.size() >= sketch_size){
+                            break;
+                        }
+                        if (ref_hashes[i][j] == 0){
+                            continue;
+                        }
+                        else if (ref_hash_to_num_samples[ref_hashes[i][j]] > max_samples){
+                            continue;
+                        }
+                        else{
+                            x.push_back(ref_hashes[i][j]);
+                        }
+                    }
 
-            // min refs
+                }
+                else{
+                    x = minhashes(ref_hashes[i], ref_hash_nums[i], sketch_size);
+                }
 
-            //min reads
+                ref_mins[i] = x;
+            }
+
+            #pragma omp for
+            for (int i = 0; i < read_keys.size(); i++){
+                hash_t* hh = read_hashes[i];
+                int hh_l = read_hash_nums[i];
+                stringstream outre;
+
+                sort(hh, hh + hh_l);
+                vector<hash_t> mins;
+                if (min_kmer_occ > 0){
+                    int ret_ind;
+                    while (hh[ret_ind] == 0){
+                        ret_ind++;
+                    }
+                    int hashmax = sketch_size + ret_ind < hh_l ? sketch_size + ret_ind : hh_l - 1;
+
+                    for (int j = 0; j < hh_l; j++){
+                        if (mins.size() == hashmax ){
+                            break;
+                        }
+
+                        if (read_hash_to_depth[hh[j]] >= min_kmer_occ && hh[j] != 0){
+                            mins.push_back(hh[j]);
+                        }
+                    }
+                }
+                else{
+                    mins = minhashes(hh, hh_l, sketch_size);
+                }
+                //#pragma omp critical
+                //s_buf[i] = outre.str();
+                //outre.str("");
+                /*json dump_hash_json(string key, int seqlen,
+        vector<hash_t> mins,
+        vector<int> kmer, 
+        int sketch_size,
+        string alphabet = "ATGC",
+        string hash_type = "MurmurHash3_x64_128",
+        bool canonical = true,
+        int hash_bits = 64,
+        int hash_seed = 42
+        ){
+
+                */
+                json jj = dump_hash_json(read_keys[i],
+                                        read_lens[i],
+                                        mins,
+                                        kmer,
+                                        sketch_size
+                                        );
+                cout << jj.dump(4) << endl;
+                //exit(1);
+                
+
+            }
 
         }
+
+
+
 
 
 
