@@ -893,45 +893,87 @@ int main_call(int argc, char** argv){
         vector<int> read_lens;
         read_lens.reserve(2000);
 
-#pragma omp master
-        cerr << "Parsing sequences...";
-        parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
-        parse_fastas(read_files, read_keys, read_seqs, read_lens);
 
+        if (kmer.size() == 0){
+            cerr << "No kmer size provided. Will use the default size of 16." << endl;
+            kmer.push_back(16);
+        }
+
+        if (sketch_size <= 0){
+            cerr << "No sketch size provided. Will use the default sketch size of 1000." << endl;
+            sketch_size = 1000;
+        }
+
+
+
+        if (ref_files.size() > 0){
+            #pragma omp master
+            cerr << "Parsing reference sequences..." << endl;
+
+            parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
+
+            #pragma omp master
+            cerr << "Done." << endl;
+        }
+            
         vector<hash_t*> ref_hashes(ref_keys.size());
         vector<int> ref_hash_nums(ref_keys.size());
 
-        vector<hash_t*> read_hashes(read_keys.size());
-        vector<int> read_hash_nums(read_keys.size());
-
-
-
-#pragma omp master
-            cerr << " Done." << endl <<
-                ref_keys.size() << " references and " << read_keys.size() << " reads parsed." << endl;
-
-#pragma omp master
-            cerr << "Hashing references... ";
+        if (ref_files.size() > 0){
+            #pragma omp master
+            cerr << "Hashing references... " << endl;
             hash_sequences(ref_keys, ref_seqs, ref_lens,
                     ref_hashes, ref_hash_nums, kmer,
                     read_hash_to_depth,
                     ref_hash_to_num_samples,
                     false,
                     (max_samples < 10000));
-#pragma omp master
-            cerr << " Done." << endl;
 
-#pragma omp master
-            cerr << "Hashing reads... ";
+            #pragma omp master
+            cerr << "Done." << endl;
+
+        }
+
+        else{
+        }
+
+
+        if (read_files.size() > 0){
+            #pragma omp master
+            cerr << "Parsing read sequences..." << endl;
+
+            parse_fastas(read_files, read_keys, read_seqs, read_lens);
+
+            #pragma omp master
+            cerr << "Done." << endl;
+        }
+
+        vector<hash_t*> read_hashes(read_keys.size());
+        vector<int> read_hash_nums(read_keys.size());
+
+
+        if (read_files.size() > 0){
+            #pragma omp master
+            cerr << "Hashing reads... " << endl;
             hash_sequences(read_keys, read_seqs, read_lens,
                     read_hashes, read_hash_nums, kmer,
                     read_hash_to_depth,
                     ref_hash_to_num_samples,
                     (min_kmer_occ > 0),
                     false);
-#pragma omp master
+            #pragma omp master
             cerr << " Done." << endl;
-            vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
+        }
+        else{
+        }
+
+
+
+        #pragma omp master
+        cerr << ref_keys.size() << " references and " << read_keys.size() << " reads parsed and hashed." << endl;
+
+        vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
+
         #pragma omp parallel
         {
         
@@ -961,6 +1003,14 @@ int main_call(int argc, char** argv){
                 }
 
                 ref_mins[i] = x;
+                json jj = dump_hash_json(ref_keys[i],
+                                        ref_lens[i],
+                                        ref_mins[i],
+                                        kmer,
+                                        sketch_size
+                                        );
+                cout << jj.dump(4) << endl;
+ 
             }
 
             #pragma omp for
