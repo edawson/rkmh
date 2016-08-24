@@ -1,9 +1,11 @@
-FROM ubuntu:14.04
+FROM ubuntu:16.04
 
 MAINTAINER eric.t.dawson@gmail.com
 
-USER root
-RUN apt-get -yq update && \
-    apt-get -yq install build-essential libzlib gcc4.9
+RUN echo "deb http://archive.ubuntu.com/ubuntu trusty-backports main restricted universe multiverse" | tee -a /etc/apt/sources.list && apt-get update && \
+    apt-get install -y build-essential gcc-5-base git zlib1g-dev
 
-RUN make
+RUN git clone --recursive https://github.com/edawson/rkmh && \
+    cd rkmh && make && cp rkmh /usr/local/bin
+
+ENTRYPOINT ["rkmh"]
