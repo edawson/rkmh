@@ -311,6 +311,8 @@ int main_call(int argc, char** argv){
     int max_samples = 1000000;
     int window_len = 100;
 
+    bool show_depth = false;
+
     int c;
     int optind = 2;
 
@@ -330,14 +332,14 @@ int main_call(int argc, char** argv){
             {"threads", required_argument, 0, 't'},
             {"min-kmer-occurence", required_argument, 0, 'M'},
             {"min-matches", required_argument, 0, 'N'},
-            {"min-diff", required_argument, 0, 'D'},
+            {"show-depth", required_argument, 0, 'd'},
             {"max-samples", required_argument, 0, 'I'},
             {"window-len", required_argument, 0, 'w'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hk:f:r:s:t:M:N:D:I:w:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hdk:f:r:s:t:M:N:I:w:", long_options, &option_index);
         if (c == -1){
             break;
         }
@@ -372,6 +374,9 @@ int main_call(int argc, char** argv){
             case 'w':
                 window_len = atoi(optarg);
                 break;
+            case 'd':
+                show_depth = true;
+                break;
             default:
                 print_help(argv);
                 abort();
@@ -381,8 +386,8 @@ int main_call(int argc, char** argv){
 
         if (sketch_size == -1){
             cerr << "Sketch size unset." << endl
-                << "Will use the default sketch size of n = 1000" << endl;
-            sketch_size = 1000;
+                << "Will use the default sketch size of n = 10000" << endl;
+            sketch_size = 10000;
         }
 
         if (kmer.size() == 0){
@@ -628,9 +633,39 @@ int main_call(int argc, char** argv){
                 }
 
                 int avg_d = avg(vector<int>(d_window.begin(), d_window.end()));
+                int max_rescue = 0;
+                
+                //int max_rescue = 0;
 
                 // This line outputs the current avg depth at a position.
-                //outre << j << "\t" << avg(vector<int>(d_window.begin(), d_window.end())) << endl;
+                if (show_depth){
+                    //avg(vector<int>(d_window.begin(), d_window.end()))
+                    outre << j << "\t" << avg_d << "\t" <<  depth;
+                   /** 
+                    string ref = string(ref_seqs[i] + j, kmer[0]);
+                    string alt(ref);
+
+
+                    int max_rescue = 0;
+                    if (depth < .5 * avg_d){
+                        for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
+                        char orig = alt[alt_pos];
+                        for (auto x : rotate_snps(orig)){
+                            alt[alt_pos] = x;
+                            int alt_depth = read_hash_to_depth[calc_hash(alt)];
+                            if (alt_depth > max_rescue){
+                                max_rescue = alt_depth;
+                            }
+
+                            alt[alt_pos] = orig;
+                        }
+
+                    }
+                    */
+                    //}
+
+                
+                }
                 if (depth < .5 * avg_d){
                     //vector<string> alts = permute(string(ref_seqs[i] + j, kmer[0]));
                     //outre << string(ref_seqs[i] + j, kmer[0]);
@@ -647,8 +682,9 @@ int main_call(int argc, char** argv){
                         for (auto x : rotate_snps(orig)){
                             alt[alt_pos] = x;
                             int alt_depth = read_hash_to_depth[calc_hash(alt)];
+                            max_rescue = max_rescue > alt_depth ? max_rescue : alt_depth;
 
-                            if (alt_depth > .9 * avg_d){
+                            if ( !show_depth && alt_depth > .9 * avg_d){
                                 int pos = j + alt_pos + 1;
                                 outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
                                 outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt << endl;
@@ -702,29 +738,37 @@ int main_call(int argc, char** argv){
                             if (!is_begin){
 
                                 int alt_depth_pre = read_hash_to_depth[calc_hash(alt_pre)];
-                                if (alt_depth_pre > .9 * avg_d){
+
+                                max_rescue = max_rescue > alt_depth_pre ? max_rescue : alt_depth_pre;
+                                if ( !show_depth && alt_depth_pre > .9 * avg_d){
                                     int pos = j + alt_pos + 1;
                                     outre << "CALL: " << orig << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth_pre << endl;
-                                    outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt_out.str() << endl;
+                                    outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt_pre << endl;
                                 }
                             }
 
                             if (!is_end){
 
                                 int alt_depth_post = read_hash_to_depth[calc_hash(alt_post)];
-                                if (alt_depth_post > .9 * avg_d){
+                                
+                                max_rescue = max_rescue > alt_depth_post ? max_rescue : alt_depth_post;
+                                if ( !show_depth && alt_depth_post > .9 * avg_d){
                                     int pos = j + alt_pos + 1;
                                     outre << "CALL: " << orig << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth_post << endl;
-                                    outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt_out.str() << endl;
+                                    outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt_post << endl;
                                 }
                             }
 
                             alt = ref;
                         }
-
+                        
                     }
                   
-                
+                     if (show_depth){
+                        outre << "\t" << (max_rescue > 0 ? max_rescue : depth) << endl;
+                    }
+
+               
 
                 //outre << endl;
                 #pragma omp critical
