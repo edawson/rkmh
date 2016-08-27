@@ -25,6 +25,8 @@ KSEQ_INIT(gzFile, gzread)
     using namespace std;
     using namespace mkmh;
 
+
+
     /**
      * Proposed CLI:
      * ./rkmh classify
@@ -58,6 +60,16 @@ KSEQ_INIT(gzFile, gzread)
      * outfile: o
      * precalc: p
      * minimum depth: -d
+     *
+     * for calling, we might be interested in using some score
+     *  to quantify how good a variant call is.
+     *  We could use the number of adjacent supporting kmers
+     *  and the depth / difference to average depth. We
+     *  already do this to some degree by setting the depth
+     *  threshold for a kmer to be considered a recovery at .9 * avg depth.
+     *
+     *  map<int, map<kmer, int> > pos_to_kmer_to_occurrence
+     *  
      */
 
     void print_help(char** argv){
@@ -723,10 +735,8 @@ int main_call(int argc, char** argv){
                                     "\told: " << alt << endl <<
                                     "\tnew: " << pre_str << endl;
                             }
-
-
-
                         }
+                        alt[alt_pos] = orig;
                     }
 
                        /**
