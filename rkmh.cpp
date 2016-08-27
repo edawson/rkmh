@@ -90,6 +90,7 @@ void help_call(char** argv){
         << "--fasta/-f <FASTA>        a fasta file to call mutations in relative to the reference." << endl
         << "--threads/-t <THREADS>    the number of OpenMP threads to utilize." << endl
         << "--window-len/-w <WINLEN>  the width of the sliding window to use for calculating average depth." << endl
+        << "--depth/-d                output tab-separated values for position, avg depth, instantaneous depth, and rescued depth." << endl
         << endl;
 }
 
@@ -694,37 +695,41 @@ int main_call(int argc, char** argv){
 
                     }
 
-                    char [4] atgc = ['A', 'T', 'G', 'C'];
+                    char atgc[4] = {'A', 'T', 'G', 'C'};
 
-                    for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
+                    for (int alt_pos = 0; alt_pos < alt.size() - 1 ; alt_pos++){
                         char orig = alt[alt_pos];
-                        bool is_end = (j < 1);
-                        bool is_begin = (j == alt.size() - 1);
+                        for (int ind = 0; ind < 3; ind++){
+                            stringstream pre_sst;
+                            for (int ii_pre = 1; ii_pre <= alt_pos; ii_pre++){
+                                pre_sst << alt[ii_pre];
+                            }
+
+                            pre_sst << atgc[ind];
                         
-                        stringstream chop_pre;
-                        stringstream chop_post;
-                        stringstream alt_out;
-                        for (int strpos = 0; strpos < alt.size(); strpos++){
-                            if (strpos > 0){
-                                chop_pre << alt[strpos];
-                                if (strpos == alt_pos){
-                                    chop_pre << orig;
-                                    chop_pre << orig;
-                                }
+                            for (int ii_post = alt_pos; ii_post < alt.size() - 1; ii_post++){
+                                    pre_sst << alt[ii_post];
+                            }
+                        
+                            string pre_str = pre_sst.str();
+                            //cerr << pre_str.size() << endl;
+                            //cerr << post_str.size() << endl;
+                            //exit(1);
+                            hash_t pre_hh = calc_hash(pre_str);
 
+                            if (read_hash_to_depth[pre_hh] > .9 * avg_d){
+                                outre << "CALL: " << orig << "->" << orig << atgc[ind] << "\tPOS: " << j + alt_pos + 1 << 
+                                    "\tDEPTH: " << read_hash_to_depth[pre_hh] << endl <<
+                                    "\told: " << alt << endl <<
+                                    "\tnew: " << pre_str << endl;
                             }
-                            if (strpos < alt.size() - 1){
-                                chop_pre << alt[alt_pos];
-                                if (strpos == alt_pos){
-                                    chop_post << orig;
-                                    chop_post << orig;
-                                }
-                            }
+
+
+
                         }
+                    }
 
-                        string pre = chop_pre.str();
-                        string post = chop_post.str();
-                        /**
+                       /**
                          *  For i in [A, C, T, G]
                          *      for each position in alt:
                          *          pre = alt[1,position] + i + alt[position + 1, alt.size]
@@ -740,7 +745,7 @@ int main_call(int argc, char** argv){
                          */
 
                         
-                    }
+                    //}
 
                     for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
                         char orig = alt[alt_pos];
