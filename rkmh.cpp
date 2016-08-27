@@ -658,6 +658,54 @@ int main_call(int argc, char** argv){
 
                     }
 
+                    char [4] atgc = ['A', 'T', 'G', 'C'];
+
+                    for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
+                        char orig = alt[alt_pos];
+                        bool is_end = (j < 1);
+                        bool is_begin = (j == alt.size() - 1);
+                        
+                        stringstream chop_pre;
+                        stringstream chop_post;
+                        stringstream alt_out;
+                        for (int strpos = 0; strpos < alt.size(); strpos++){
+                            if (strpos > 0){
+                                chop_pre << alt[strpos];
+                                if (strpos == alt_pos){
+                                    chop_pre << orig;
+                                    chop_pre << orig;
+                                }
+
+                            }
+                            if (strpos < alt.size() - 1){
+                                chop_pre << alt[alt_pos];
+                                if (strpos == alt_pos){
+                                    chop_post << orig;
+                                    chop_post << orig;
+                                }
+                            }
+                        }
+
+                        string pre = chop_pre.str();
+                        string post = chop_post.str();
+                        /**
+                         *  For i in [A, C, T, G]
+                         *      for each position in alt:
+                         *          pre = alt[1,position] + i + alt[position + 1, alt.size]
+                         *          post = alt[0, position] + i + alt[position + 1, alt.size - 1]
+                         *          pre_hh  = calc_hash(pre)
+                         *          post_hh = calc_hash(post)
+                         *          pre_depth = hash_to_depth[pre_hh]
+                         *          post_depth = hash_to_depth[post_hh]
+                         *
+                         *          if (pre_depth > .9 * avg(depth) ||
+                         *              post_depth > .9 * avg(depth)):
+                         *                  call = pre_depth > post_depth ? pre : post;
+                         */
+
+                        
+                    }
+
                     for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
                         char orig = alt[alt_pos];
                         char hanger;
