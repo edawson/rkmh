@@ -25,6 +25,8 @@ KSEQ_INIT(gzFile, gzread)
     using namespace std;
     using namespace mkmh;
 
+
+
     /**
      * Proposed CLI:
      * ./rkmh classify
@@ -58,6 +60,16 @@ KSEQ_INIT(gzFile, gzread)
      * outfile: o
      * precalc: p
      * minimum depth: -d
+     *
+     * for calling, we might be interested in using some score
+     *  to quantify how good a variant call is.
+     *  We could use the number of adjacent supporting kmers
+     *  and the depth / difference to average depth. We
+     *  already do this to some degree by setting the depth
+     *  threshold for a kmer to be considered a recovery at .9 * avg depth.
+     *
+     *  map<int, map<kmer, int> > pos_to_kmer_to_occurrence
+     *  
      */
 
     void print_help(char** argv){
@@ -90,6 +102,7 @@ void help_call(char** argv){
         << "--fasta/-f <FASTA>        a fasta file to call mutations in relative to the reference." << endl
         << "--threads/-t <THREADS>    the number of OpenMP threads to utilize." << endl
         << "--window-len/-w <WINLEN>  the width of the sliding window to use for calculating average depth." << endl
+        << "--depth/-d                output tab-separated values for position, avg depth, instantaneous depth, and rescued depth." << endl
         << endl;
 }
 
@@ -687,6 +700,56 @@ int main_call(int argc, char** argv){
                         }
 
                     }
+
+                    char atgc[4] = {'A', 'T', 'G', 'C'};
+
+                    for (int alt_pos = 0; alt_pos < alt.size() - 1 ; alt_pos++){
+                        char orig = alt[alt_pos];
+                        for (int ind = 0; ind < 3; ind++){
+                            stringstream pre_sst;
+                            for (int ii_pre = 1; ii_pre <= alt_pos; ii_pre++){
+                                pre_sst << alt[ii_pre];
+                            }
+
+                            pre_sst << atgc[ind];
+                        
+                            for (int ii_post = alt_pos; ii_post < alt.size() - 1; ii_post++){
+                                    pre_sst << alt[ii_post];
+                            }
+                        
+                            string pre_str = pre_sst.str();
+                            //cerr << pre_str.size() << endl;
+                            //cerr << post_str.size() << endl;
+                            //exit(1);
+                            hash_t pre_hh = calc_hash(pre_str);
+
+                            if (read_hash_to_depth[pre_hh] > .9 * avg_d){
+                                outre << "CALL: " << orig << "->" << orig << atgc[ind] << "\tPOS: " << j + alt_pos + 1 << 
+                                    "\tDEPTH: " << read_hash_to_depth[pre_hh] << endl <<
+                                    "\told: " << alt << endl <<
+                                    "\tnew: " << pre_str << endl;
+                            }
+                        }
+                        alt[alt_pos] = orig;
+                    }
+
+                       /**
+                         *  For i in [A, C, T, G]
+                         *      for each position in alt:
+                         *          pre = alt[1,position] + i + alt[position + 1, alt.size]
+                         *          post = alt[0, position] + i + alt[position + 1, alt.size - 1]
+                         *          pre_hh  = calc_hash(pre)
+                         *          post_hh = calc_hash(post)
+                         *          pre_depth = hash_to_depth[pre_hh]
+                         *          post_depth = hash_to_depth[post_hh]
+                         *
+                         *          if (pre_depth > .9 * avg(depth) ||
+                         *              post_depth > .9 * avg(depth)):
+                         *                  call = pre_depth > post_depth ? pre : post;
+                         */
+
+                        
+                    //}
 
                     for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
                         char orig = alt[alt_pos];
