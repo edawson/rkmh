@@ -576,7 +576,7 @@ int main_call(int argc, char** argv){
             char orig = x[i];
             stringstream tmp;
             for (int strpos = 0; strpos < x.size(); strpos++){
-                
+               tmp << x[strpos]; 
             }
         }
 
@@ -667,16 +667,10 @@ int main_call(int argc, char** argv){
                 
                 }
                 if (depth < .5 * avg_d){
-                    //vector<string> alts = permute(string(ref_seqs[i] + j, kmer[0]));
-                    //outre << string(ref_seqs[i] + j, kmer[0]);
-                    //outre << depth;
-                    //for (int a_ind = 0; a_ind < alts.size(); a_ind++){
-
-
-                    // SNPs
                     string ref = string(ref_seqs[i] + j, kmer[0]);
                     string alt(ref);
-
+                    
+                    // SNPs
                     for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
                         char orig = alt[alt_pos];
                         for (auto x : rotate_snps(orig)){
@@ -775,13 +769,6 @@ int main_call(int argc, char** argv){
                 cout << outre.str();
                 //s_buf[i] = outre.str();
                 outre.str("");
-                //if (depth < .5 * avg(vector<int>(d_window.begin(), d_window.end()))){
-                //cout << "Low Depth: " << string(ref_seqs[i] + j, 12) << " " << depth << endl;
-
-                //}
-                //else {
-                //cout << "Kmer " << string(ref_seqs[i] + j, 12) << " " << depth << endl;
-                //}
 
             }
 
