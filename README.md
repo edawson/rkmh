@@ -4,7 +4,7 @@ Eric T Dawson
 June 2016
 
 ### What is it
-rkmh performs identification and alignment-free variant calling on long reads
+rkmh performs identification of *individual long reads* and alignment-free variant calling
 using MinHash (as implemented in [Mash](https://github.com/marbl/Mash)).
 
 
