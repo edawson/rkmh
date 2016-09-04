@@ -4,9 +4,13 @@ Eric T Dawson
 June 2016
 
 ### What is it
-rkmh performs MinHash (as implemented in [Mash](https://github.com/marbl/Mash)) on a set of reads
-and reference genomes to classify each read in the set to its nearest match in the reference set.
-It can also classify reads by directly comparing all of their kmers.
+rkmh performs identification and alignment-free variant calling on long reads
+using MinHash (as implemented in [Mash](https://github.com/marbl/Mash)).
+
+
+We're using rkmh to identify which strains are present in infections with multiple strains of the same virus and any mutations they might have.
+rkmh could also be used to mark reads as possible contaminants or call mutations in novel strains that have been
+sequenced. You could also cluster the output of `rkmh hash` to discover separations between sequences in your sample.
 
 ### License
 MIT, but please cite the repository if you use it.
@@ -73,7 +77,7 @@ On a set of 1000 minION reads from a known HPV strain, rkmh is ~97% accurate (co
 of 182 input reference strains) and runs in <20 seconds. With the kmer depth and minimum match filters we're approaching 100% accuracy for about the same run time.
 We're working on ways to improve sensitivity with further filtering and correction.
 
-rkmh is threaded using OpenMP but the code should be considered minimally tuned. Hashing can handle around 250 reads/second (250 * 7kb means we're running over 1,500,000 basepairs / second).
+rkmh is threaded using OpenMP but the code should be considered minimally tuned. Hashing can handle around 400 reads/second (400 * 7kb means we're running over 2,500,000 basepairs / second).
 
 ### Getting help
 Please post to the [github](https://github.com/edawson/rkmh.git) for help.

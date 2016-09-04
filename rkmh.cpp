@@ -209,10 +209,11 @@ void hash_sequences(vector<string>& keys,
             tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seqs[i], lengths[i], kmer);
             hashes[i] = std::get<0>(hashes_and_num);
             hash_lengths[i] = std::get<1>(hashes_and_num);
+            // TODO this is awful. There has to be a safe way around it.
                 #pragma omp critical
                 {
                     for (int j = 0; j < hash_lengths[i]; j++){
-                        #pragma omp atomic
+                        //#pragma omp atomic update TODO removing this is under testing
                         read_hash_to_depth[hashes[i][j]] ++;
                     }
                 }
@@ -230,7 +231,7 @@ void hash_sequences(vector<string>& keys,
             #pragma omp critical
             {
                 for (auto x : sample_set){
-                    #pragma omp atomic
+                    //#pragma omp atomic TODO under testing
                     ref_to_sample_depth[x] ++;
                 }
             }
@@ -437,6 +438,9 @@ int main_call(int argc, char** argv){
 
     omp_set_num_threads(threads);
 
+    //TODO switch to c arrays from vectors?
+    // we know the size of these and we carry the lengths around
+
     vector<string> ref_keys;
     ref_keys.reserve(500);
     vector<char*> ref_seqs;
@@ -450,6 +454,9 @@ int main_call(int argc, char** argv){
     read_seqs.reserve(2000);
     vector<int> read_lens;
     read_lens.reserve(2000);
+
+    // TODO try something faster than a map / unordered_map?
+    // a massive array?
 
     unordered_map<hash_t, int> read_hash_to_depth;
     read_hash_to_depth.reserve(1000000);
@@ -525,37 +532,32 @@ int main_call(int argc, char** argv){
         return (double) ret / (double) n_list.size();
     };
 
-    std::function<vector<char>(char)> rotate_snps = [](char c){
-        vector<char> ret(3);
+    std::function<double(int* depth_arr, int start, int window, int size)> avg_arr = [](int* depth_arr, int start, int window, int size){
+        int end =  1;
+        return 2.0;
+    };
 
-        // ACTG
-        switch (c){
-            case 'A':
-            case 'a':
-                ret[0] = 'C';
-                ret[1] = 'T';
-                ret[2] = 'G';
-                break;
-            case 'T':
-            case 't':
-                ret[0] = 'C';
-                ret[1] = 'G';
-                ret[2] = 'A';
-                break;
-            case 'C':
-            case 'c':
-                ret[0] = 'T';
-                ret[1] = 'G';
-                ret[2] = 'A';
-                break;
-            case 'G':
-            case 'g':
-                ret[0] = 'A';
-                ret[1] = 'C';
-                ret[2] = 'T';
-                break;
+    vector<char> a_ret = {'C', 'T', 'G'};
+    vector<char> c_ret = {'T', 'G', 'A'};
+    vector<char> t_ret = {'C', 'G', 'A'};
+    vector<char> g_ret = {'A', 'C', 'T'};
+
+
+    std::function<vector<char>(char)> rotate_snps = [&a_ret, &c_ret, &g_ret, &t_ret](char c){
+
+        if ( c == 'A' || c == 'a'){
+            return a_ret;
         }
-        return ret;
+        else if (c == 'T' || c == 't'){
+            return t_ret;
+        }
+        else if (c == 'C' || c == 'c'){
+            return c_ret;
+        }
+        else if (c == 'G' || c == 'g'){
+           return g_ret; 
+        }
+
     };
 
     std::function<vector<string>(string)> permute = [&](string x){
@@ -623,19 +625,22 @@ int main_call(int argc, char** argv){
 
         return ret;
     };
-    std::function<vector<pair<char*, int> >(char*, int)> permutator = [](char* kmer, int len){
-        vector<pair<char*, int> > ret;
-        return ret;
 
-    };
+    /***
+     * TODO: try using the entire sequence as the window size,
+     * calculating average depth. Maybe store depth windows rather than calculate them?
+     *
+     * Also reverse complement entire sequence and use the (seqlen - i) trick to compare the same kmers,
+     * only calling reverse_reverse_complement once per sequence
+     *
+     * map[ reference ] -> vector<depth>: windowed depth at each position
+     * vector<array<int> > 
+     *  conveniently the same length as the reference.
+     */
 
-    std::function<string(int, int, string, int, int)> emit_call = [](int ref_pos, int k_pos, string ref, int alt_call, int depth){
-        stringstream ret;
-
-        return ret.str();
-
-    };
-
+        
+    vector<int*> depth_arrs(ref_keys.size());
+    
 
 #pragma omp parallel
     {
@@ -720,121 +725,89 @@ int main_call(int argc, char** argv){
 
                     char atgc[4] = {'A', 'T', 'G', 'C'};
 
-                    for (int alt_pos = 0; alt_pos < alt.size() - 1 ; alt_pos++){
+                    // Deletions
+                    // TODO both insertions and deletions are tough because we don't know whether to take a trailing or
+                    // precending character in building the new kmer. Either might be optimal.
+                    if (j > 0){
+                    char* k_alt = new char[kmer[0] + 1];
+                    k_alt[kmer[0]] = '\0';
+                    for (int alt_pos = 0; alt_pos < kmer[0]; ++alt_pos){
                         char orig = alt[alt_pos];
-                        for (int ind = 0; ind < 3; ind++){
-                            stringstream pre_sst;
-                            for (int ii_pre = 1; ii_pre <= alt_pos; ii_pre++){
-                                pre_sst << alt[ii_pre];
+                        char front_hanger = *(ref_seqs[i] + j + kmer[0] + 1);
+                        char tail_hanger = *(ref_seqs[i] + j - 1);
+                        // Shift all characters left one, tack ref[start] + k + 1 char onto end
+                        // hash it and check its depth.
+                        k_alt[0] = front_hanger;
+                        int k_alt_pos = 1;
+                        for (int k_pos = 0; k_pos < alt.size(), k_alt_pos < alt.size(); k_pos++){
+                            if (k_pos == alt_pos){
+                                continue;
+                            }
+                            k_alt[k_alt_pos] = ref[k_pos];
+                            k_alt_pos++; 
+                        }
+
+                        /// TEST DEPTH
+                        int alt_depth = read_hash_to_depth[calc_hash(k_alt, kmer[0])];
+                        if (!show_depth && alt_depth > .9 * avg_d){
+                            int pos = j + alt_pos + 1;
+                            outre << "CALL: " << ref[alt_pos] << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
+                            outre << "\t" << "old: " << " " << ref << endl << "\t" << "new: " << k_alt << endl;
+                            
+                        }
+
+                        
+                        /// Homopolymer Insertions, 1bp
+                        k_alt_pos = 0;
+                        for (int k_pos = 0; k_alt_pos < ref.size(); ++k_pos){
+                            k_alt[k_alt_pos] = ref[k_pos];
+                            if (k_pos == alt_pos){
+                                k_alt[++k_alt_pos] = ref[k_pos];
+                            }
+                            ++k_alt_pos;
+                        }
+
+                        alt_depth = read_hash_to_depth[calc_hash(k_alt, kmer[0])];
+                        if (!show_depth && alt_depth > .9 * avg_d){
+                            int pos = j + alt_pos + 1;
+                            outre << "CALL: " << ref[alt_pos] << "->" << ref[alt_pos] << ref[alt_pos] << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
+                            outre << "\t" << "old: " << ref << endl << "\t" << "new: " << k_alt << endl;
+                            
+                        }
+
+
+
+                       // Non-homopolymer 1bp insertions
+                        orig = ref[alt_pos]; 
+                        for (auto x : rotate_snps(orig)){
+                            k_alt_pos = 0;
+                            for (int k_pos = 0; k_alt_pos < ref.size(); ++k_pos){
+                                k_alt[k_alt_pos] = ref[k_pos];
+                                if (k_pos == alt_pos){
+                                    k_alt[++k_alt_pos] = x;
+                                }
+                                ++k_alt_pos;
                             }
 
-                            pre_sst << atgc[ind];
-
-                            for (int ii_post = alt_pos; ii_post < alt.size() - 1; ii_post++){
-                                pre_sst << alt[ii_post];
-                            }
-
-                            string pre_str = pre_sst.str();
-                            //cerr << pre_str.size() << endl;
-                            //cerr << post_str.size() << endl;
-                            //exit(1);
-                            hash_t pre_hh = calc_hash(pre_str);
-
-                            if (read_hash_to_depth[pre_hh] > .9 * avg_d){
-                                outre << "CALL: " << orig << "->" << orig << atgc[ind] << "\tPOS: " << j + alt_pos + 1 << 
-                                    "\tDEPTH: " << read_hash_to_depth[pre_hh] << endl <<
-                                    "\told: " << alt << endl <<
-                                    "\tnew: " << pre_str << endl;
+                            alt_depth = read_hash_to_depth[calc_hash(k_alt, kmer[0])];
+                            if (!show_depth && alt_depth > .9 * avg_d){
+                                int pos = j + alt_pos + 1;
+                                outre << "CALL: " << ref[alt_pos] << "->" << ref[alt_pos] << x << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
+                                outre << "\t" << "old: " << ref << endl << "\t" << "new: " << k_alt << endl;
+                            
                             }
                         }
-                        alt[alt_pos] = orig;
+
                     }
 
-                    /**
-                     *  For i in [A, C, T, G]
-                     *      for each position in alt:
-                     *          pre = alt[1,position] + i + alt[position + 1, alt.size]
-                     *          post = alt[0, position] + i + alt[position + 1, alt.size - 1]
-                     *          pre_hh  = calc_hash(pre)
-                     *          post_hh = calc_hash(post)
-                     *          pre_depth = hash_to_depth[pre_hh]
-                     *          post_depth = hash_to_depth[post_hh]
-                     *
-                     *          if (pre_depth > .9 * avg(depth) ||
-                     *              post_depth > .9 * avg(depth)):
-                     *                  call = pre_depth > post_depth ? pre : post;
-                     */
-
-
-                    //}
-
-                    for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
-                        char orig = alt[alt_pos];
-                        char hanger;
-                        bool is_end = false;
-                        bool is_begin = false;
-                        if (j < 1){
-                            is_begin = true;
-                        }
-                        else if (j == alt.size() - 1){
-                            is_end  = true;
-                        }
-                        stringstream alt_stream_pre;
-                        stringstream alt_stream_post;
-                        stringstream alt_out;
-
-                        if (!is_begin){
-                            hanger = ref_seqs[i][j - 1];
-                            alt_stream_pre << hanger;
-                        }
-                        for (int strpos = 0; strpos < alt.size() - 1; strpos++){
-                            if (strpos != alt_pos){
-                                alt_stream_pre << alt[strpos];
-                                alt_stream_post << alt[strpos];
-                                alt_out << alt[strpos];
-                            }
-                            else{
-                                alt_out << "_";
-                            }
-
-                        }
-                        if (!is_end){
-                            hanger = ref_seqs[i][j + 1];
-                            alt_stream_post << hanger;
-                        }
-
-                        string alt_post;
-                        string alt_pre;
-                        alt_pre = alt_stream_pre.str();
-                        alt_post = alt_stream_post.str();
-
-
-                        if (!is_begin){
-
-                            int alt_depth_pre = read_hash_to_depth[calc_hash(alt_pre)];
-
-                            max_rescue = max_rescue > alt_depth_pre ? max_rescue : alt_depth_pre;
-                            if ( !show_depth && alt_depth_pre > .9 * avg_d){
-                                int pos = j + alt_pos + 1;
-                                outre << "CALL: " << orig << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth_pre << endl;
-                                outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt_pre << endl;
-                            }
-                        }
-
-                        if (!is_end){
-
-                            int alt_depth_post = read_hash_to_depth[calc_hash(alt_post)];
-
-                            max_rescue = max_rescue > alt_depth_post ? max_rescue : alt_depth_post;
-                            if ( !show_depth && alt_depth_post > .9 * avg_d){
-                                int pos = j + alt_pos + 1;
-                                outre << "CALL: " << orig << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth_post << endl;
-                                outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt_post << endl;
-                            }
-                        }
-
-                        alt = ref;
+                    delete [] k_alt;
                     }
+                    
+
+                    // Insertions
+                    //
+
+
 
             }
 
@@ -845,7 +818,8 @@ int main_call(int argc, char** argv){
 
 
             //outre << endl;
-#pragma omp critical
+            // TODO this critical is only needed because GCC doesn't adhere to atomic STDOUT
+            #pragma omp critical
             cout << outre.str();
             //s_buf[i] = outre.str();
             outre.str("");
