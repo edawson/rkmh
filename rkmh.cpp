@@ -1333,11 +1333,16 @@ int main_hash(int argc, char** argv){
         vector<int> read_hash_nums(read_keys.size());
 
 
-        vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
+        vector<int> read_sketch_starts(read_keys.size());
+        vector<int> ref_sketch_starts(ref_keys.size());
+        vector<int> read_sketch_lens(read_keys.size());
+        vector<int> ref_sketch_lens(ref_keys.size());
+        vector<hash_t*> read_sketches(read_keys.size());
+        vector<hash_t*> ref_sketches(ref_keys.size());
 
-        vector<string> s_buf(read_keys.size());
 
-#pragma omp master
+
+        #pragma omp master
         cerr << "Hashing references... ";
         hash_sequences(ref_keys, ref_seqs, ref_lens,
                 ref_hashes, ref_hash_nums, kmer,
@@ -1345,10 +1350,10 @@ int main_hash(int argc, char** argv){
                 ref_hash_to_num_samples,
                 false,
                 (max_samples < 10000));
-#pragma omp master
+        #pragma omp master
         cerr << " Done." << endl;
 
-#pragma omp master
+        #pragma omp master
         cerr << "Hashing reads... ";
         hash_sequences(read_keys, read_seqs, read_lens,
                 read_hashes, read_hash_nums, kmer,
@@ -1356,21 +1361,23 @@ int main_hash(int argc, char** argv){
                 ref_hash_to_num_samples,
                 (min_kmer_occ > 0),
                 false);
-#pragma omp master
+        #pragma omp master
         cerr << " Done." << endl;
 
-#pragma omp parallel
+        #pragma omp parallel
         {
 
-#pragma omp for
+            #pragma omp for
             for (int i = 0; i < ref_keys.size(); i++){
-                vector<hash_t> x;
+                ref_sketch_starts[i] = 0;
+                ref_sketch_lens[i] = 0;
+                ref_sketches[i] = new hash_t[ sketch_size ];
                 std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
                 if (max_samples < 10000){
-                    for (int j = 0; j < ref_hash_nums[i]; j++){
-                        if (x.size() >= sketch_size){
-                            break;
-                        }
+                    for (int j = 0; j < ref_hash_nums[i], ref_sketch_lens[i] <= sketch_size; j++){
+                        //if (ref_sketch_lens[i] >= sketch_size){
+                        //    break;
+                        //}
                         if (ref_hashes[i][j] == 0){
                             continue;
                         }
@@ -1378,72 +1385,84 @@ int main_hash(int argc, char** argv){
                             continue;
                         }
                         else{
-                            x.push_back(ref_hashes[i][j]);
+                            ref_sketches[i][ref_sketch_lens[i]] = ref_hashes[i][j];
+                            ++ref_sketch_lens[i];
                         }
                     }
 
                 }
                 else{
-                    x = minhashes(ref_hashes[i], ref_hash_nums[i], sketch_size);
+                    ref_sketches[i] = ref_hashes[i];
+                    while (ref_hashes[i][ref_sketch_starts[i]] == 0 && ref_sketch_starts[i] < ref_hash_nums[i]){
+                        ++ref_sketch_starts[i];
+                    }
+                    int diff = ref_hash_nums[i] - ref_sketch_starts[i];
+                    ref_sketch_lens[i] = (diff < sketch_size) ? diff : sketch_size; 
+
                 }
-
-                ref_mins[i] = x;
-
-
 
             }
 
-#pragma omp for
+            #pragma omp for
             for (int i = 0; i < read_keys.size(); i++){
+                read_sketch_starts[i] = 0;
+                read_sketch_lens[i] = 0;
+
                 hash_t* hh = read_hashes[i];
                 int hh_l = read_hash_nums[i];
                 stringstream outre;
 
                 sort(hh, hh + hh_l);
-                vector<hash_t> mins;
                 if (min_kmer_occ > 0){
-                    int ret_ind;
-                    while (hh[ret_ind] == 0){
-                        ret_ind++;
+                    read_sketches[i] = new hash_t[sketch_size];
+                    while(hh[read_sketch_starts[i]] == 0 && read_sketch_starts[i] < read_hash_nums[i]){
+                        ++(read_sketch_starts[i]);
                     }
-                    int hashmax = sketch_size + ret_ind < hh_l ? sketch_size + ret_ind : hh_l - 1;
-
-                    for (int j = 0; j < hh_l; j++){
-                        if (mins.size() == hashmax ){
-                            break;
-                        }
-
-                        if (read_hash_to_depth[hh[j]] >= min_kmer_occ && hh[j] != 0){
-                            mins.push_back(hh[j]);
+                    
+                    for (int d_ind = read_sketch_starts[i]; d_ind < read_hash_nums[i]; ++d_ind){
+                        if (read_hash_to_depth[hh[d_ind]] >= min_kmer_occ){
+                            read_sketches[i][read_sketch_lens[i]] = hh[d_ind];
+                            ++(read_sketch_lens[i]);
                         }
                     }
+                    read_sketch_starts[i] = 0;
+                    
                 }
                 else{
-                    mins = minhashes(hh, hh_l, sketch_size);
+                    read_sketches[i] = read_hashes[i];
+                    while(read_sketches[i][read_sketch_starts[i]] == 0 && read_sketch_starts[i] < read_hash_nums[i]){
+                        ++read_sketch_starts[i];
+                    }
+                    int diff = hh_l - read_sketch_starts[i];
+                    read_sketch_lens[i] = diff < sketch_size ? diff : sketch_size;
+                    
                 }
+                //exit(1);
+
+
+
+/**inline tuple<string, int, int> classify_and_count(vector<string> ref_keys, vector<hash_t*> ref_mins, hash_t* read_mins,
+                                                    vector<int> ref_starts, int read_start,
+                                                    vector<int> ref_lens, int read_len,
+                                                    int sketch_size){
+ */
                 tuple<string, int, int> result;
-                result = classify_and_count(mins, ref_keys, ref_mins);
+                result = classify_and_count(ref_keys, ref_sketches, read_sketches[i], ref_sketch_starts, read_sketch_starts[i], ref_sketch_lens, read_sketch_lens[i], sketch_size);
 
 
-                bool depth_filter = mins.size() == 0; 
+                bool depth_filter = read_sketch_lens[i] <= 0; 
                 bool match_filter = std::get<1>(result) < min_matches;
 
                 outre  << "Sample: " << read_keys[i] << "\t" << "Result: " << 
                     std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
                     (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
 
-                //#pragma omp critical
-                //cout << outre.str();
-                //#pragma omp critical
-                s_buf[i] = outre.str();
+                #pragma omp critical
+                cout << outre.str();
                 outre.str("");
 
             }
 
-        }
-
-        for (auto s : s_buf){
-            cout << s;
         }
 
         for (auto x : read_hashes){
