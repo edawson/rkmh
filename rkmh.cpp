@@ -213,8 +213,8 @@ void hash_sequences(vector<string>& keys,
                 #pragma omp critical
                 {
                     for (int j = 0; j < hash_lengths[i]; j++){
-                        //#pragma omp atomic update TODO removing this is under testing
-                        read_hash_to_depth[hashes[i][j]] ++;
+                        //#pragma omp atomic update //TODO removing this is under testing
+                        ++read_hash_to_depth[ hashes[i][j] ];
                     }
                 }
             }
@@ -231,8 +231,8 @@ void hash_sequences(vector<string>& keys,
             #pragma omp critical
             {
                 for (auto x : sample_set){
-                    //#pragma omp atomic TODO under testing
-                    ref_to_sample_depth[x] ++;
+                    //#pragma omp atomic //TODO under testing
+                    ++ref_to_sample_depth[x];
                 }
             }
         }
@@ -294,7 +294,23 @@ json dump_hashes(vector<string> keys,
         vector<vector<hash_t> > hashes,
         vector<int> kmer,
         int sketch_size){
+
     json j;
+    for (int i = 0; i < keys.size(); i++){
+        j[keys[i]] = {
+            {"name", keys[i]},
+            {"alphabet", "ATGC"},
+            {"canonical", "false"},
+            {"hashBits", 64},
+            {"hash_type", "MurmurHash3_x64_128"},
+            {"hash_seed", 42},
+            {"sketches", hashes[i]},
+            {"length", sketch_size},
+            {"kmer", kmer},
+            {"preserveCase", "false"}
+        };
+    }
+
     return j;
 }
 
@@ -1279,6 +1295,7 @@ int main_hash(int argc, char** argv){
 
         omp_set_num_threads(threads);
 
+
         vector<string> ref_keys;
         ref_keys.reserve(500);
         vector<char*> ref_seqs;
@@ -1333,10 +1350,10 @@ int main_hash(int argc, char** argv){
         vector<int> read_hash_nums(read_keys.size());
 
 
-        vector<int> read_sketch_starts(read_keys.size());
-        vector<int> ref_sketch_starts(ref_keys.size());
-        vector<int> read_sketch_lens(read_keys.size());
-        vector<int> ref_sketch_lens(ref_keys.size());
+        int* read_sketch_starts = new int[(read_keys.size())];
+        int* ref_sketch_starts = new int [(ref_keys.size())];
+        int* read_sketch_lens = new int [(read_keys.size())];
+        int* ref_sketch_lens = new int [(ref_keys.size())];
         vector<hash_t*> read_sketches(read_keys.size());
         vector<hash_t*> ref_sketches(ref_keys.size());
 
@@ -1419,7 +1436,7 @@ int main_hash(int argc, char** argv){
                         ++(read_sketch_starts[i]);
                     }
                     
-                    for (int d_ind = read_sketch_starts[i]; d_ind < read_hash_nums[i]; ++d_ind){
+                    for (int d_ind = read_sketch_starts[i]; d_ind < read_hash_nums[i], read_sketch_lens[i] < sketch_size; ++d_ind){
                         if (read_hash_to_depth[hh[d_ind]] >= min_kmer_occ){
                             read_sketches[i][read_sketch_lens[i]] = hh[d_ind];
                             ++(read_sketch_lens[i]);
@@ -1437,9 +1454,6 @@ int main_hash(int argc, char** argv){
                     read_sketch_lens[i] = diff < sketch_size ? diff : sketch_size;
                     
                 }
-                //exit(1);
-
-
 
 /**inline tuple<string, int, int> classify_and_count(vector<string> ref_keys, vector<hash_t*> ref_mins, hash_t* read_mins,
                                                     vector<int> ref_starts, int read_start,
@@ -1457,26 +1471,38 @@ int main_hash(int argc, char** argv){
                     std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
                     (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
 
-                #pragma omp critical
+                #pragma omp critical // This can be safely removed if compiling with ICPC, for a decent boost in performance.
                 cout << outre.str();
                 outre.str("");
+                if (read_hashes[i] != read_sketches[i]){
+                    delete [] read_hashes[i];
+                }
+                delete [] read_sketches[i];
+
 
             }
 
         }
 
-        for (auto x : read_hashes){
-            delete [] x;;
-        }
         for (auto x : read_seqs){
             delete [] x;
         }
-        for (auto y : ref_hashes){
-            delete [] y;
+        for (int i = 0; i < ref_keys.size(); i++){
+            if (ref_hashes[i] != ref_sketches[i]){
+                delete [] ref_hashes[i];
+            }
+            delete [] ref_sketches[i];
         }
+
         for (auto y : ref_seqs){
             delete [] y;
         }
+
+        delete [] read_sketch_lens;
+        delete [] ref_sketch_lens;
+
+        delete [] read_sketch_starts;
+        delete [] ref_sketch_starts;
 
         return 0;
     }

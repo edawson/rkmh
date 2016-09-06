@@ -197,8 +197,8 @@ inline tuple<string, int, int> classify_and_count(vector<hash_t>& read_mins, vec
 };
 
 inline tuple<string, int, int> classify_and_count(vector<string> ref_keys, vector<hash_t*> ref_mins, hash_t* read_mins,
-                                                    vector<int> ref_starts, int read_start,
-                                                    vector<int> ref_lens, int read_len,
+                                                    int* ref_starts, int read_start,
+                                                    int* ref_lens, int read_len,
                                                     int sketch_size){
     int max_shared = 0;
     string sample = "";
@@ -210,7 +210,7 @@ inline tuple<string, int, int> classify_and_count(vector<string> ref_keys, vecto
      *                                                              hash_t* beta, int beta_len, int beta_start,
      *                                                                                                                          int sketch_size){
      * */
-    for (int i = 0; i < ref_mins.size(); i++){
+    for (int i = 0; i < ref_keys.size(); i++){
         std::tuple<hash_t*, int> inter = hash_intersection(ref_mins[i], ref_starts[i], ref_lens[i], read_mins, read_start, read_len, sketch_size);
         int shared = std::get<1>(inter);
         if (shared > max_shared){
@@ -219,6 +219,7 @@ inline tuple<string, int, int> classify_and_count(vector<string> ref_keys, vecto
             shared_inter = shared;
             total_union = read_len < ref_lens[i] ? read_len : ref_lens[i];
         }
+        delete [] std::get<0>(inter);
 
     }
     return std::make_tuple(sample, shared_inter, total_union);
