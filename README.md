@@ -3,6 +3,9 @@ RKMH: Read classification by Kmers / MinHash
 Eric T Dawson  
 June 2016
 
+
+[![](https://images.microbadger.com/badges/image/erictdawson/rkmh.svg)](https://microbadger.com/images/erictdawson/rkmh "Get your own image badge on microbadger.com")
+
 ### What is it
 rkmh performs identification of *individual long reads* and alignment-free variant calling
 using MinHash (as implemented in [Mash](https://github.com/marbl/Mash)).
