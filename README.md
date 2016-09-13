@@ -1,10 +1,10 @@
-RKMH: Read classification by Kmers or MinHash
+RKMH: Read classification by Kmers / MinHash
 --------------------------------------------
 Eric T Dawson  
 June 2016
 
 ### What is it
-rkmh performs identification and alignment-free variant calling on long reads
+rkmh performs identification of *individual long reads* and alignment-free variant calling
 using MinHash (as implemented in [Mash](https://github.com/marbl/Mash)).
 
 
@@ -29,7 +29,7 @@ rkmh requires a set of reads and a set of references in the FASTA/FASTQ format. 
 be in FASTQ format.
 
 
-To do the same, but use a MinHash sketch of size 1000 instead of just comparing kmers:  
+To use MinHash sketch of size 1000, and a kmer size of 10:  
 ```./rkmh classify -r references.fa -f reads.fq -k 10 -s 1000```
 
 There's also now a filter for minimum kmer occurrence in a read set, compatible with the MinHash sketch.
@@ -37,8 +37,12 @@ To only use kmers that occur more than 10 times in the reads:
 ```./rkmh classify -r references.fa -f reads.fq -k 10 -s 1000 -M 100```
 
 There is also a filter that will fail reads with fewer than some number of matches to any reference.
-It's availble via the `-P` flag:  
+It's availble via the `-N` flag:  
 ```./rkmh -r references.fa -f reads.fq -k 10 -s 1000 -M 100 -N 10```
+
+
+**A note on optimum kmer size**: we've had a lot of success with k <= 15 on data fron ONT's R7 pore. I don't have any R9 flowcells around lab, but 
+I expect we'll do a bit better on R9 given what others have been showing off.
 
 ### Call
 Once you've identified which reference a set of reads most closely matches, you may want to figure out the differences between your set of reads
@@ -46,7 +50,7 @@ and your reference. `rkmh call` uses a brute-force approach to produce a list of
 
 ```rkmh call -r ref.fa -f reads.fq -k 12 -t 4```  
 
-We advise using only one reference during call, as it's relatively slow. For example, you might first classify your reads using `classify`, then
+We advise using only one reference during call, as it's relatively slow (~10x longer than classification, 10 seconds for 1100 reads). For example, you might first classify your reads using `classify`, then
 for the top classification in your set run `rkmh call`.
 
 ### Hash
@@ -77,7 +81,13 @@ On a set of 1000 minION reads from a known HPV strain, rkmh is ~97% accurate (co
 of 182 input reference strains) and runs in <20 seconds. With the kmer depth and minimum match filters we're approaching 100% accuracy for about the same run time.
 We're working on ways to improve sensitivity with further filtering and correction.
 
-rkmh is threaded using OpenMP but the code should be considered minimally tuned. Hashing can handle around 400 reads/second (400 * 7kb means we're running over 2,500,000 basepairs / second).
+
+rkmh is threaded using OpenMP. Hashing can handle more than 400 reads/second (400 * 7kb means we're running over 2,500,000 basepairs / second), with some room still left for improvement.
+
+
+We've tested up to 100,000 6.5kb reads + 182 references in a bit over 8GB of RAM, but we're working to scale to larger genomes and more reads. We've run an E. coli
+run (actually, Nick Loman's R7.3 dataset against 6 E. coli references) on a desktop with 16GB of RAM. We think with a few tweaks we can do a lot better.
+
 
 ### Getting help
 Please post to the [github](https://github.com/edawson/rkmh.git) for help.
