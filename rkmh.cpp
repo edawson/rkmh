@@ -16,6 +16,7 @@
 #include "kseq.hpp"
 #include "equiv.hpp"
 #include "json.hpp"
+#include "HASHTCounter.hpp"
 
 // for convenience
 using json = nlohmann::json;
@@ -24,6 +25,7 @@ KSEQ_INIT(gzFile, gzread)
 
     using namespace std;
     using namespace mkmh;
+    using namespace HTC;
 
 
 
@@ -214,6 +216,7 @@ void hash_sequences(vector<string>& keys,
         bool doReadDepth,
         bool doReferenceDepth){
 
+
     if (doReadDepth){
         #pragma omp parallel for
         for (int i = 0; i < keys.size(); i++){
@@ -259,7 +262,6 @@ void hash_sequences(vector<string>& keys,
         }
 
     }
-
 
 }
 
