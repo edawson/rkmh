@@ -1,3 +1,6 @@
 [submodule "mkmh"]
 	path = mkmh
 	url = https://github.com/edawson/mkmh.git
+[submodule "Catch"]
+	path = Catch
+	url = https://github.com/philsquared/Catch.git
