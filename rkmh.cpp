@@ -398,12 +398,6 @@ int main_stream(int argc, char** argv){
             case 'I':
                 max_samples = atoi(optarg);
                 break;
-            case 'w':
-                window_len = atoi(optarg);
-                break;
-            case 'd':
-                show_depth = true;
-                break;
             default:
                 print_help(argv);
                 abort();
