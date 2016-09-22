@@ -7,5 +7,3 @@ RUN echo "deb http://archive.ubuntu.com/ubuntu trusty-backports main restricted 
 
 RUN git clone --recursive https://github.com/edawson/rkmh && \
     cd rkmh && make && cp rkmh /usr/local/bin
-
-ENTRYPOINT ["rkmh"]
