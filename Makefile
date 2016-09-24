@@ -1,11 +1,12 @@
-IS_ICPC:= $(shell command -v icpc 2> /dev/null)
+#IS_ICPC:= $(shell command -v icpc 2> /dev/null)
 
 # STATIC_FLAG:= -static -static-intel
 
 
 ifdef IS_ICPC
 	CXX:=icpc
-	CXXFLAGS:= -O3 -std=c++11 -xAVX -qopenmp -funroll-loops -ggdb -pg
+	CXXFLAGS:= -O0 -std=c++11 -funroll-loops -ggdb -pg -qopenmp
+	#CXXFLAGS:= -O3 -xAVX -std=c++11 -qopenmp -funroll-loops
 else
 	CXX:=g++
 	CXXFLAGS:= -O3 -std=c++11 -fopenmp -mtune=native -ggdb

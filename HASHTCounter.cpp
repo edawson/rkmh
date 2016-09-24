@@ -20,10 +20,11 @@ namespace HTC{
     }
 
     void HASHTCounter::increment(htc_type key){
-        ++ (*(counts + (key % my_size )));
+        //cout << (++counts [ key % my_size ]) << endl;
+        ++(counts[ key % my_size ]);
     }
 
-    int HASHTCounter::get(htc_type key){
+    int& HASHTCounter::get(htc_type key){
         return (counts[ key % my_size ]);
     }
 
@@ -40,5 +41,9 @@ namespace HTC{
         //value_t& operator[](std::size_t idx)       { return mVector[idx]; }
         //const value_t& operator[](std::size_t idx) const { return mVector[idx]; }
         return (counts [ key % my_size ]);
+    }
+
+    int* HASHTCounter::begin(void){
+        return counts;
     }
 }
