@@ -757,7 +757,7 @@ int main_stream(int argc, char** argv){
         //
         // Thanks heavens for https://biowize.wordpress.com/2013/03/05/using-kseq-h-with-stdin/
 
-        bool streamify_me_capn = false;
+        bool streamify_me_capn = true;
         if (streamify_me_capn){
             FILE *instream = NULL;
             instream = stdin;
@@ -765,14 +765,70 @@ int main_stream(int argc, char** argv){
             gzFile fp = gzdopen(fileno(instream), "r");
             kseq_t *seq = kseq_init(fp);
             while (kseq_read(seq) >= 0){
+                char* seq;
+                int seq_len;
+                hash_t* hashes;
+                int hash_len;
+                hash_t* sketch = new hash_t[ sketch_size ];
+                int sketch_len;
+
+                int read_min_start;
+                int read_min_len = 0;
                 // hash me
+                stringstream outre;
+
+                /*
+                 * *read_mins[i] = new hash_t[ sketch_size ];
+                read_min_lens[i] = 0;
+                read_min_starts[i] = 0;
+                std::sort(read_hashes[i], read_hashes[i] + read_hash_lens[i]);
+                if (doReadDepth){
+                    for (int j = 0; j < read_hash_lens[i], read_min_lens[i] < sketch_size; ++j){
+                        if (read_hashes[i][j] != 0 && read_hash_counter[ read_hashes[i][j] ] > min_kmer_occ){
+                            read_mins[i][read_min_lens[i]] = read_hashes[i][j];
+                            ++read_min_lens[i];
+                        }
+                        else{
+                            continue;
+                        }
+                    }
+                }
+                else{
+                    while (read_hashes[i][ read_min_starts[i] ] == 0 && read_min_starts[i] < read_hash_lens[i]){
+                        ++read_min_starts[i];
+                    }
+                    for (int j = read_min_starts[i]; j < read_hash_lens[i], read_min_lens[i] < sketch_size; ++j){
+                        read_mins[i][read_min_lens[i]] = read_hashes[i][j];
+                        ++read_min_lens[i];
+                    }
+                }
+                read_min_starts[i] = 0;
+                delete [] read_hashes[i];
+                tuple<string, int, int> result;
 
                 // and then just sketch me
 
                 // so I can get my
-                
+
                 // classification
+                result = classify_and_count(ref_keys, ref_mins, read_mins[i], ref_min_starts, read_min_starts[i], ref_min_lens, read_min_lens[i], sketch_size);
+
+
+                bool depth_filter = read_min_lens[i] <= 0; 
+                bool match_filter = std::get<1>(result) < min_matches;
+
+                outre  << "Sample: " << read_keys[i] << "\t" << "Result: " << 
+                    std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
+                    (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
+
+#pragma omp critical
+                cout << outre.str();
+                outre.str("");
+                delete [] read_mins[i];
+
+*/
             }
+            
             kseq_destroy(seq);
             gzclose(fp);
 
@@ -942,7 +998,7 @@ int main_call(int argc, char** argv){
     ref_hash_to_num_samples.reserve(1000000);
 
 
-#pragma omp master
+    #pragma omp master
     cerr << "Parsing sequences...";
 
     if (ref_files.size() >= 1){

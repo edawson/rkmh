@@ -29,6 +29,11 @@ namespace HTC{
         return (counts[ key % my_size ]);
     }
 
+    void HASHTCounter::get(htc_type key, int& ret){
+        #pragma omp atomic write 
+        ret = (counts[ key % my_size ]);
+    }
+
     int HASHTCounter::size(void){
         return my_size;
     }
