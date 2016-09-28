@@ -913,7 +913,7 @@ int main_call(int argc, char** argv){
 
 
 #pragma omp master
-    cerr << "Parsing sequences...";
+    cerr << "Parsing sequences..." << endl;
 
     if (ref_files.size() >= 1){
         parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
@@ -1732,7 +1732,7 @@ int main_classify(int argc, char** argv){
 
 
 #pragma omp master
-    cerr << "Parsing sequences...";
+    cerr << "Parsing sequences..." << endl;
 
     if (ref_files.size() >= 1){
         parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
