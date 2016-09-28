@@ -21,6 +21,7 @@ namespace HTC{
 
     void HASHTCounter::increment(htc_type key){
         //cout << (++counts [ key % my_size ]) << endl;
+        #pragma omp atomic update
         ++(counts[ key % my_size ]);
     }
 
