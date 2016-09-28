@@ -161,6 +161,7 @@ void help_stream(char** argv){
         << "--fasta/-f   <FASTAFILE>" << endl
         << "--kmer/-k    <KMERSIZE>" << endl
         << "--sketch-size/-s <SKETCHSIZE>" << endl
+        << "--ref-sketch / -S <REFSKTCHSZ>" << endl
         << "--threads/-t <THREADS>" << endl
         << "--min-kmer-occurence/-M <MINOCCURENCE>" << endl
         << "--min-matches/-N <MINMATCHES>" << endl
@@ -486,6 +487,9 @@ int main_stream(int argc, char** argv){
     bool doReadDepth = false;
     bool doReferenceDepth = false;
 
+    bool useHASHTs = false;
+    int ref_sketch_size = 0;
+
     // TODO still need:
     // prehashed depth map for reads/ref
     // prehashed reads / refs
@@ -506,7 +510,8 @@ int main_stream(int argc, char** argv){
             {"kmer", no_argument, 0, 'k'},
             {"fasta", required_argument, 0, 'f'},
             {"reference", required_argument, 0, 'r'},
-            {"sketch", required_argument, 0, 's'},
+            {"sketch-size", required_argument, 0, 's'},
+            {"ref-sketch", required_argument, 0, 'S'},
             {"threads", required_argument, 0, 't'},
             {"min-kmer-occurence", required_argument, 0, 'M'},
             {"min-matches", required_argument, 0, 'N'},
@@ -519,7 +524,7 @@ int main_stream(int argc, char** argv){
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hdk:f:r:s:t:M:N:I:R:F:p:q:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hdk:f:r:s:S:t:M:N:I:R:F:p:q:", long_options, &option_index);
         if (c == -1){
             break;
         }
@@ -559,6 +564,10 @@ int main_stream(int argc, char** argv){
                 break;
             case 's':
                 sketch_size = atoi(optarg);
+                break;
+            case 'S':
+                useHASHTs = true;
+                ref_sketch_size = 3 * atoi(optarg);
                 break;
             case 'M':
                 min_kmer_occ = atoi(optarg);
@@ -746,7 +755,28 @@ int main_stream(int argc, char** argv){
         // hash them, possibly with kmer depth filtering,
         // create a sketch, then classify and report the classification.
         //
-        //
+        // Thanks heavens for https://biowize.wordpress.com/2013/03/05/using-kseq-h-with-stdin/
+
+        bool streamify_me_capn = false;
+        if (streamify_me_capn){
+            FILE *instream = NULL;
+            instream = stdin;
+
+            gzFile fp = gzdopen(fileno(instream), "r");
+            kseq_t *seq = kseq_init(fp);
+            while (kseq_read(seq) >= 0){
+                // hash me
+
+                // and then just sketch me
+
+                // so I can get my
+                
+                // classification
+            }
+            kseq_destroy(seq);
+            gzclose(fp);
+
+        }
 
     } 
 
