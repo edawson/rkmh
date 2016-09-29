@@ -1529,7 +1529,7 @@ int main_hash(int argc, char** argv){
                 sort(hh, hh + hh_l);
                 vector<hash_t> mins;
                 if (min_kmer_occ > 0){
-                    int ret_ind;
+                    int ret_ind = 0;
                     while (hh[ret_ind] == 0){
                         ret_ind++;
                     }
