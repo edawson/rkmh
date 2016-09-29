@@ -269,9 +269,10 @@ void hash_sequences(vector<string>& keys,
             //#pragma omp critical
             {
                 for (int j = 0; j < hash_lengths[i]; j++){
-#pragma omp atomic update //TODO removing this is under testing
-                    ++read_hash_counter[ (uint64_t) hashes[i][j] ];
-                    //read_hash_counter.increment( (uint64_t) hashes[i][j] );
+
+                    //#pragma omp atomic update //TODO removing this is under testing
+                    //++read_hash_counter[ (uint64_t) hashes[i][j] ];
+                    read_hash_counter.increment( (uint64_t) hashes[i][j] );
                 }
             }
         }
@@ -288,9 +289,9 @@ void hash_sequences(vector<string>& keys,
             //#pragma omp critical
             {
                 for (auto x : sample_set){
-#pragma omp atomic update //TODO under testing
-                    ++ref_hash_counter[ x ];
-                    //ref_hash_counter.increment( x );
+                    //#pragma omp atomic update //TODO under testing
+                    //++ref_hash_counter[ x ];
+                    ref_hash_counter.increment( x );
                 }
             }
         }
@@ -669,14 +670,18 @@ int main_stream(int argc, char** argv){
             ref_mins[i] = new hash_t[ sketch_size ];
             std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_lens[i]);
             if (max_samples < 10000){
-                for (int j = 0; j < ref_hash_lens[i], ref_min_lens[i] <= sketch_size; j++){
+                for (int j = 0; j < ref_hash_lens[i]; j++){
                     //if (ref_sketch_lens[i] >= sketch_size){
                     //    break;
                     //}
                     hash_t curr = ref_hashes[i][j];
-                    if (ref_hashes[i][j] != 0 && ref_hash_counter[ (uint64_t) curr ] < max_samples){
+                    cerr << ref_hash_counter.get(curr) << endl;
+                    if (curr != 0 && ref_hash_counter.get(curr) < max_samples){
                         ref_mins[i][ref_min_lens[i]] = ref_mins[i][j];
                         ++ref_min_lens[i];
+                        if (ref_min_lens[i] == sketch_size){
+                            break;
+                        }
                     }
                     else{
                         continue;
@@ -702,7 +707,7 @@ int main_stream(int argc, char** argv){
 
         // Classify existing reads
         // conveniently, read_keys.size() will be zero if there are no reads.
-#pragma omp for
+        #pragma omp for
         for (int i = 0; i < read_keys.size(); i++){
             stringstream outre;
             read_mins[i] = new hash_t[ sketch_size ];
@@ -710,10 +715,14 @@ int main_stream(int argc, char** argv){
             read_min_starts[i] = 0;
             std::sort(read_hashes[i], read_hashes[i] + read_hash_lens[i]);
             if (doReadDepth){
-                for (int j = 0; j < read_hash_lens[i], read_min_lens[i] < sketch_size; ++j){
-                    if (read_hashes[i][j] != 0 && read_hash_counter[ read_hashes[i][j] ] > min_kmer_occ){
+                for (int j = 0; j < read_hash_lens[i]; ++j){
+
+                    if (read_hashes[i][j] != 0 && read_hash_counter.get(read_hashes[i][j]) > min_kmer_occ){
                         read_mins[i][read_min_lens[i]] = read_hashes[i][j];
-                        ++read_min_lens[i];
+                        ++(read_min_lens[i]);
+                        if (read_min_lens[i] == sketch_size){
+                            break;
+                        }
                     }
                     else{
                         continue;
@@ -1802,7 +1811,10 @@ int main_classify(int argc, char** argv){
     vector<hash_t*> read_sketches(read_keys.size());
     vector<hash_t*> ref_sketches(ref_keys.size());
 
+    int sbuf_size = 100;
 
+    string * sbuf = new string [sbuf_size];
+    int sbuf_ind = 0;
 
 #pragma omp master
     cerr << "Hashing references... ";
@@ -1869,7 +1881,6 @@ int main_classify(int argc, char** argv){
         for (int i = 0; i < read_keys.size(); i++){
             read_sketch_starts[i] = 0;
             read_sketch_lens[i] = 0;
-
             hash_t* hh = read_hashes[i];
             int hh_l = read_hash_nums[i];
             stringstream outre;
@@ -1882,7 +1893,14 @@ int main_classify(int argc, char** argv){
                 }
 
                 for (int d_ind = read_sketch_starts[i]; d_ind < read_hash_nums[i], read_sketch_lens[i] < sketch_size; ++d_ind){
-                    if (read_hash_to_depth[hh[d_ind]] >= min_kmer_occ){
+                    int k_depth = 0;
+                    // I'm sorry for using auto here, but
+                    // read_hash_to_depth is a map<hash_t, int> FWIW.
+                    auto k_d_iter = read_hash_to_depth.find(hh[d_ind]);
+                    if (k_d_iter != read_hash_to_depth.end()){
+                        k_depth = k_d_iter->second;
+                    }
+                    if ( k_depth >= min_kmer_occ){
                         read_sketches[i][read_sketch_lens[i]] = hh[d_ind];
                         ++(read_sketch_lens[i]);
                     }
@@ -1916,8 +1934,18 @@ int main_classify(int argc, char** argv){
                 std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
                 (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
 
-#pragma omp critical // This can be safely removed if compiling with ICPC, for a decent boost in performance.
-            cout << outre.str();
+            sbuf[sbuf_ind] = outre.str();
+            #pragma omp atomic update
+            ++sbuf_ind;
+            if (sbuf_ind == sbuf_size){
+                #pragma omp critical
+                {
+                    for (int sbi = 0; sbi < sbuf_ind; sbi++){
+                        cout << sbuf[sbi];
+                    }
+                    sbuf_ind = 0;
+                }
+            }
             outre.str("");
             if (read_hashes[i] != read_sketches[i]){
                 delete [] read_hashes[i];
@@ -1928,6 +1956,12 @@ int main_classify(int argc, char** argv){
         }
 
         }
+
+        for (int sbi = 0; sbi < sbuf_ind; ++sbi){
+            cout << sbuf[sbi];
+        }
+
+        delete [] sbuf;
 
         for (auto x : read_seqs){
             delete [] x;
