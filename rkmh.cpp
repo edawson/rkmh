@@ -491,6 +491,8 @@ int main_stream(int argc, char** argv){
     bool useHASHTs = false;
     int ref_sketch_size = 0;
 
+    bool streamify_me_capn = false;
+
     // TODO still need:
     // prehashed depth map for reads/ref
     // prehashed reads / refs
@@ -521,11 +523,12 @@ int main_stream(int argc, char** argv){
             {"pre-references", required_argument, 0, 'R'},
             {"read-kmer-map-file", required_argument, 0, 'p'},
             {"ref-kmer-map-file", required_argument, 0, 'q'},
+            {"in-stream", no_argument, 0, 'i'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hdk:f:r:s:S:t:M:N:I:R:F:p:q:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hdk:f:r:s:S:t:M:N:I:R:F:p:q:i", long_options, &option_index);
         if (c == -1){
             break;
         }
@@ -577,6 +580,9 @@ int main_stream(int argc, char** argv){
             case 'I':
                 max_samples = atoi(optarg);
                 doReferenceDepth = true;
+                break;
+            case 'i':
+                streamify_me_capn = true;
                 break;
             default:
                 print_help(argv);
@@ -766,28 +772,59 @@ int main_stream(int argc, char** argv){
         //
         // Thanks heavens for https://biowize.wordpress.com/2013/03/05/using-kseq-h-with-stdin/
 
-        bool streamify_me_capn = false;
+        } 
+        bool debug = true;
         if (streamify_me_capn){
             FILE *instream = NULL;
             instream = stdin;
 
             gzFile fp = gzdopen(fileno(instream), "r");
             kseq_t *seq = kseq_init(fp);
+            stringstream outre;
             while (kseq_read(seq) >= 0){
+                to_upper(seq->seq.s, seq->seq.l);
+
+                string name = string(seq->name.s);
+                int len = seq->seq.l;
+            
                 // hash me
+                tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
 
+                hash_t* hashes = std::get<0>(hashes_and_num);
+                int hashlen = std::get<1>(hashes_and_num);
+
+                std::sort(hashes, hashes + hashlen);
                 // and then just sketch me
-
+                // TODO need to handle some read_depth
+                int sketch_start = 0;
+                int sketch_len = 0;
+                while (hashes[sketch_start] == 0 && sketch_start < hashlen){
+                    ++sketch_start;
+                }
+                sketch_len = hashlen >= sketch_size ? sketch_size : hashlen;
                 // so I can get my
-                
                 // classification
+                tuple<string, int, int> result;
+                result = classify_and_count(ref_keys, ref_mins, hashes, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size);
+                
+                bool depth_filter = sketch_len <= 0; 
+                bool match_filter = std::get<1>(result) < min_matches;
+
+                outre  << "Sample: " << name << "\t" << "Result: " << 
+                            std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
+                            (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
+
+                #pragma omp critical
+                cout << outre.str();
+                outre.str("");
+
+                delete [] hashes;
             }
             kseq_destroy(seq);
             gzclose(fp);
 
-        }
+    }
 
-    } 
 
     delete [] ref_min_lens;
     delete [] read_min_lens;
@@ -1813,7 +1850,7 @@ int main_classify(int argc, char** argv){
 
     int sbuf_size = 100;
 
-    string * sbuf = new string [sbuf_size];
+    vector<string> sbuf(sbuf_size);
     int sbuf_ind = 0;
 
 #pragma omp master
@@ -1848,19 +1885,16 @@ int main_classify(int argc, char** argv){
             ref_sketches[i] = new hash_t[ sketch_size ];
             std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
             if (max_samples < 10000){
-                for (int j = 0; j < ref_hash_nums[i], ref_sketch_lens[i] <= sketch_size; j++){
-                    //if (ref_sketch_lens[i] >= sketch_size){
-                    //    break;
-                    //}
-                    if (ref_hashes[i][j] == 0){
-                        continue;
-                    }
-                    else if (ref_hash_to_num_samples[ref_hashes[i][j]] > max_samples){
-                        continue;
+                for (int j = 0; j < ref_hash_nums[i]; j++){
+                    if (ref_hashes[i][j] != 0 && ref_hash_to_num_samples[ref_hashes[i][j]] <= max_samples)
+                         ref_sketches[i][ref_sketch_lens[i]] = ref_hashes[i][j];
+                        ++ref_sketch_lens[i];
+                   
+                    if (ref_sketch_lens[i] >= sketch_size){
+                        break;
                     }
                     else{
-                        ref_sketches[i][ref_sketch_lens[i]] = ref_hashes[i][j];
-                        ++ref_sketch_lens[i];
+                        continue;
                     }
                 }
 
@@ -1892,7 +1926,7 @@ int main_classify(int argc, char** argv){
                     ++(read_sketch_starts[i]);
                 }
 
-                for (int d_ind = read_sketch_starts[i]; d_ind < read_hash_nums[i], read_sketch_lens[i] < sketch_size; ++d_ind){
+                for (int d_ind = read_sketch_starts[i]; d_ind < read_hash_nums[i]; ++d_ind){
                     int k_depth = 0;
                     // I'm sorry for using auto here, but
                     // read_hash_to_depth is a map<hash_t, int> FWIW.
@@ -1903,6 +1937,9 @@ int main_classify(int argc, char** argv){
                     if ( k_depth >= min_kmer_occ){
                         read_sketches[i][read_sketch_lens[i]] = hh[d_ind];
                         ++(read_sketch_lens[i]);
+                        if (read_sketch_lens[i] == sketch_size){
+                            break;
+                        }
                     }
                 }
                 read_sketch_starts[i] = 0;
@@ -1937,7 +1974,7 @@ int main_classify(int argc, char** argv){
             sbuf[sbuf_ind] = outre.str();
             #pragma omp atomic update
             ++sbuf_ind;
-            if (sbuf_ind == sbuf_size){
+            if (sbuf_ind == (sbuf_size - 1)){
                 #pragma omp critical
                 {
                     for (int sbi = 0; sbi < sbuf_ind; sbi++){
@@ -1961,7 +1998,6 @@ int main_classify(int argc, char** argv){
             cout << sbuf[sbi];
         }
 
-        delete [] sbuf;
 
         for (auto x : read_seqs){
             delete [] x;
