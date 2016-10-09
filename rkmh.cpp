@@ -652,8 +652,8 @@ int main_stream(int argc, char** argv){
     int* read_min_lens = new int [read_keys.size() ];
 
 
-    HASHTCounter read_hash_counter(10000000);
-    HASHTCounter ref_hash_counter(10000000);
+    HASHTCounter read_hash_counter(1000000);
+    HASHTCounter ref_hash_counter(1000000);
 
 
 
@@ -675,15 +675,15 @@ int main_stream(int argc, char** argv){
             ref_min_lens[i] = 0;
             ref_mins[i] = new hash_t[ sketch_size ];
             std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_lens[i]);
-            if (max_samples < 10000){
-                for (int j = 0; j < ref_hash_lens[i]; j++){
+            if (max_samples < 100000){
+                for (int j = 0; j < ref_hash_lens[i], ref_min_lens[i] < sketch_size; j++){
                     //if (ref_sketch_lens[i] >= sketch_size){
                     //    break;
                     //}
                     hash_t curr = ref_hashes[i][j];
-                    cerr << ref_hash_counter.get(curr) << endl;
-                    if (curr != 0 && ref_hash_counter.get(curr) < max_samples){
-                        ref_mins[i][ref_min_lens[i]] = ref_mins[i][j];
+                    //cerr << ref_hash_counter.get(curr) << endl;
+                    if (curr != 0 && ref_hash_counter.get(curr) <= max_samples){
+                        ref_mins[i][ref_min_lens[i]] = ref_hashes[i][j];
                         ++ref_min_lens[i];
                         if (ref_min_lens[i] == sketch_size){
                             break;
@@ -764,7 +764,7 @@ int main_stream(int argc, char** argv){
 
 
         }
-
+    }
         // Take in a quartet of lines from STDIN (FASTQ format??)
         // or perhaps just individual read sequences and names (or give them names dynamically
         // hash them, possibly with kmer depth filtering,
@@ -772,8 +772,6 @@ int main_stream(int argc, char** argv){
         //
         // Thanks heavens for https://biowize.wordpress.com/2013/03/05/using-kseq-h-with-stdin/
 
-        } 
-        bool debug = true;
         if (streamify_me_capn){
             FILE *instream = NULL;
             instream = stdin;
@@ -789,8 +787,10 @@ int main_stream(int argc, char** argv){
             
                 // hash me
                 tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
+                // hash me
+                stringstream outre;
 
-                hash_t* hashes = std::get<0>(hashes_and_num);
+               hash_t* hashes = std::get<0>(hashes_and_num);
                 int hashlen = std::get<1>(hashes_and_num);
 
                 std::sort(hashes, hashes + hashlen);
@@ -819,6 +819,8 @@ int main_stream(int argc, char** argv){
                 outre.str("");
 
                 delete [] hashes;
+
+                // classification
             }
             kseq_destroy(seq);
             gzclose(fp);
