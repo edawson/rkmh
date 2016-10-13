@@ -800,10 +800,9 @@ int main_stream(int argc, char** argv){
             
                 // hash me
                 tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
-                // hash me
                 stringstream outre;
 
-               hash_t* hashes = std::get<0>(hashes_and_num);
+                hash_t* hashes = std::get<0>(hashes_and_num);
                 int hashlen = std::get<1>(hashes_and_num);
 
                 std::sort(hashes, hashes + hashlen);
@@ -811,10 +810,25 @@ int main_stream(int argc, char** argv){
                 // TODO need to handle some read_depth
                 int sketch_start = 0;
                 int sketch_len = 0;
-                while (hashes[sketch_start] == 0 && sketch_start < hashlen){
-                    ++sketch_start;
+                hash_t* mins = new hash_t[sketch_size];
+                if (min_kmer_occ > 0){
+                    for (int i = 0; i < hashlen; i++){
+                        hash_t curr = *(hashes + i);
+                        if (read_hash_counter.get(curr) >= min_kmer_occ && curr != 0){
+                            mins[sketch_len] = curr;
+                            ++sketch_len;
+                        }
+                        if (sketch_len == sketch_size){
+                            break;
+                        }
+                    }
                 }
-                sketch_len = hashlen >= sketch_size ? sketch_size : hashlen;
+                else{
+                    while (hashes[sketch_start] == 0 && sketch_start < hashlen){
+                        ++sketch_start;
+                    }
+                    sketch_len = hashlen >= sketch_size ? sketch_size : hashlen;
+                }
                 // so I can get my
                 // classification
                 tuple<string, int, int> result;
