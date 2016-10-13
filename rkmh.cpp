@@ -655,7 +655,7 @@ int main_stream(int argc, char** argv){
     HASHTCounter read_hash_counter(1000000);
     HASHTCounter ref_hash_counter(1000000);
 
-
+    vector<vector<string> > results(threads);
 
     if (!ref_files.empty()){
         hash_sequences(ref_keys, ref_seqs, ref_lens, ref_hashes, ref_hash_lens, kmer, read_hash_counter, ref_hash_counter, false, doReferenceDepth);
@@ -667,7 +667,9 @@ int main_stream(int argc, char** argv){
     }
 
     //Time to calculate mins for references!
-#pragma omp parallel
+    int nthreads = 0;
+    int tid = 0;
+#pragma omp parallel private(tid, nthreads)
     {
 #pragma omp for
         for (int i = 0; i < ref_keys.size(); i++){
@@ -676,14 +678,15 @@ int main_stream(int argc, char** argv){
             ref_mins[i] = new hash_t[ sketch_size ];
             std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_lens[i]);
             if (max_samples < 100000){
-                for (int j = 0; j < ref_hash_lens[i], ref_min_lens[i] < sketch_size; j++){
+                for (int j = 0; j < ref_hash_lens[i], ref_min_lens[i] < sketch_size; ++j){
                     //if (ref_sketch_lens[i] >= sketch_size){
                     //    break;
                     //}
-                    hash_t curr = ref_hashes[i][j];
+                    hash_t curr = *(ref_hashes[i] + j);
                     //cerr << ref_hash_counter.get(curr) << endl;
                     if (curr != 0 && ref_hash_counter.get(curr) <= max_samples){
-                        ref_mins[i][ref_min_lens[i]] = ref_hashes[i][j];
+                        ref_mins[i][ref_min_lens[i]] = curr;
+                        //ref_mins[i][ref_min_lens[i]] = ref_hashes[i][j];
                         ++ref_min_lens[i];
                         if (ref_min_lens[i] == sketch_size){
                             break;
@@ -700,7 +703,7 @@ int main_stream(int argc, char** argv){
                     ++ref_min_starts[i];
                 }
                 for (int j = ref_min_starts[i]; j < ref_hash_lens[i], ref_min_lens[i] < sketch_size; ++j){
-                    ref_mins[i][ref_min_lens[i]] = ref_hashes[i][j];
+                    ref_mins[i][ref_min_lens[i]] = *(ref_hashes[i] + j);
                     ++ref_min_lens[i];
                 }
 
@@ -724,7 +727,8 @@ int main_stream(int argc, char** argv){
                 for (int j = 0; j < read_hash_lens[i]; ++j){
 
                     if (read_hashes[i][j] != 0 && read_hash_counter.get(read_hashes[i][j]) > min_kmer_occ){
-                        read_mins[i][read_min_lens[i]] = read_hashes[i][j];
+                        read_mins[i][read_min_lens[i]] = *(read_hashes[i] + j);
+                        
                         ++(read_min_lens[i]);
                         if (read_min_lens[i] == sketch_size){
                             break;
@@ -740,12 +744,13 @@ int main_stream(int argc, char** argv){
                     ++read_min_starts[i];
                 }
                 for (int j = read_min_starts[i]; j < read_hash_lens[i], read_min_lens[i] < sketch_size; ++j){
-                    read_mins[i][read_min_lens[i]] = read_hashes[i][j];
+                    read_mins[i][read_min_lens[i]] = *(read_hashes[i] + j);
                     ++read_min_lens[i];
                 }
             }
             read_min_starts[i] = 0;
             delete [] read_hashes[i];
+
             tuple<string, int, int> result;
             result = classify_and_count(ref_keys, ref_mins, read_mins[i], ref_min_starts, read_min_starts[i], ref_min_lens, read_min_lens[i], sketch_size);
 
@@ -757,14 +762,22 @@ int main_stream(int argc, char** argv){
                 std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
                 (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
 
-#pragma omp critical
-            cout << outre.str();
+            //#pragma omp critical
+            //cout << outre.str();
+            tid = omp_get_thread_num();
+            results[tid].push_back(outre.str());
             outre.str("");
             delete [] read_mins[i];
 
 
         }
     }
+    for (int i = 0; i < results.size(); ++i){
+        for (int j = 0; j < results[i].size(); ++j){
+            cout << results[i][j];
+        }
+    }
+
         // Take in a quartet of lines from STDIN (FASTQ format??)
         // or perhaps just individual read sequences and names (or give them names dynamically
         // hash them, possibly with kmer depth filtering,
@@ -1973,18 +1986,9 @@ int main_classify(int argc, char** argv){
                 std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
                 (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
 
-            sbuf[sbuf_ind] = outre.str();
-            #pragma omp atomic update
-            ++sbuf_ind;
-            if (sbuf_ind == (sbuf_size - 1)){
-                #pragma omp critical
-                {
-                    for (int sbi = 0; sbi < sbuf_ind; sbi++){
-                        cout << sbuf[sbi];
-                    }
-                    sbuf_ind = 0;
-                }
-            }
+#pragma omp critical
+            cout << outre.str();
+
             outre.str("");
             if (read_hashes[i] != read_sketches[i]){
                 delete [] read_hashes[i];
