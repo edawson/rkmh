@@ -477,7 +477,7 @@ int main_stream(int argc, char** argv){
 
     int sketch_size = 1000;
     int threads = 1;
-    int min_kmer_occ = 1;
+    int min_kmer_occ = -1;
     int min_matches = -1;
     int min_diff = 0;
     int max_samples = 100000;
@@ -812,7 +812,7 @@ int main_stream(int argc, char** argv){
                 int sketch_len = 0;
                 hash_t* mins = new hash_t[sketch_size];
                 if (min_kmer_occ > 0){
-                    for (int i = 0; i < hashlen; i++){
+                    for (int i = 0; i < hashlen; ++i){
                         hash_t curr = *(hashes + i);
                         if (read_hash_counter.get(curr) >= min_kmer_occ && curr != 0){
                             mins[sketch_len] = curr;
@@ -827,12 +827,20 @@ int main_stream(int argc, char** argv){
                     while (hashes[sketch_start] == 0 && sketch_start < hashlen){
                         ++sketch_start;
                     }
-                    sketch_len = hashlen >= sketch_size ? sketch_size : hashlen;
+                    cerr << "SL: " << sketch_len << endl;
+                    for (int i = sketch_start; i < hashlen; ++i){
+                        mins[sketch_len++] = *(hashes + i);
+                        if (sketch_len == sketch_size){
+                            break;
+                        }
+                    }
+                    cerr << "\t" << sketch_len;
                 }
+                sketch_start = 0;
                 // so I can get my
                 // classification
                 tuple<string, int, int> result;
-                result = classify_and_count(ref_keys, ref_mins, hashes, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size);
+                result = classify_and_count(ref_keys, ref_mins, mins, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size);
                 
                 bool depth_filter = sketch_len <= 0; 
                 bool match_filter = std::get<1>(result) < min_matches;
@@ -846,6 +854,7 @@ int main_stream(int argc, char** argv){
                 outre.str("");
 
                 delete [] hashes;
+                delete [] mins;
 
                 // classification
             }

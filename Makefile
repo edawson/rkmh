@@ -1,4 +1,4 @@
-#IS_ICPC:= $(shell command -v icpc 2> /dev/null)
+IS_ICPC:= $(shell command -v icpc 2> /dev/null)
 
 # STATIC_FLAG:= -static -static-intel
 
