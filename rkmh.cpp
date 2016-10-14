@@ -827,14 +827,12 @@ int main_stream(int argc, char** argv){
                     while (hashes[sketch_start] == 0 && sketch_start < hashlen){
                         ++sketch_start;
                     }
-                    cerr << "SL: " << sketch_len << endl;
                     for (int i = sketch_start; i < hashlen; ++i){
                         mins[sketch_len++] = *(hashes + i);
                         if (sketch_len == sketch_size){
                             break;
                         }
                     }
-                    cerr << "\t" << sketch_len;
                 }
                 sketch_start = 0;
                 // so I can get my
