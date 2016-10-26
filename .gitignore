@@ -1,3 +1,7 @@
 *.o
 ekmmh
 rkmh
+.Rproj.user
+*.Rhistory
+cwl/*/*.html
+*.Rproj

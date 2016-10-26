@@ -1,0 +1,124 @@
+## rkmh classify {.tabset}
+
+```{r include = FALSE}
+require(rmarkdown); require(knitr); require(sevenbridges); require(readr)
+
+options(max.print = "99"); opts_knit$set(width = 99)
+opts_chunk$set(cache=FALSE, tidy=FALSE)
+
+source("~/sbg_auth.R")
+
+```
+
+https://github.com/edawson/rkmh
+
+### base command
+
+```{sh base command, eval=FALSE}
+
+rkmh classify -r ref_genomes.txt -f ref_genomes.txt
+
+
+```
+
+### I/O {.tabset}
+
+#### inputs
+
+```{r inputs}
+
+inputs = list(
+  
+input(id = "references", label = "references", description = "A file containing reference genomes in fasta format", type = "File", prefix = "-r"),
+  
+input(id = "fasta", label = "fasta", description = "A fasta files containing reads", type = "File", prefix = "-f"),
+  
+input(id = "kmer_size", label = "kmer size", description = "The kmer size to use for hashing", type = "int", prefix = "-k"),
+  
+input(id = "sketch_size", label = "sketch size", description = "The number of hashes to use for comparison", type = "int", prefix = "-s"),
+  
+input(id = "min_kmer_occ", label = "Minimum Kmer Occcurence", description = "Filter kmers that occur fewer than N times.", type = "int", prefix = "-M")
+  
+)
+
+```
+
+
+### arguments
+
+```{r arguments}
+
+arguments = arguments = CCBList(
+  
+  CommandLineBinding(position = 101, prefix = ">", valueFrom = list('{return $job.inputs.fasta.name + ".rkmh_classify.txt"}')),
+
+  CommandLineBinding(position = 102, valueFrom = list('"&& ls -lhrt"')))
+
+```
+
+
+#### outputs
+
+```{r output}
+
+outputs = list(
+
+output(id = "classify_results", label = "classify results", 
+description = "the output of rkmh classify", type = "File",
+inheritMetadataFrom = "#fasta",
+metadata = list(from_tool = "rkmh_classify"),
+glob = Expression(engine = "#cwl-js-engine",
+script = '"*.txt"')),
+  
+output(id = "std_out", label = "std_out", 
+description = "standard output", type = "File",
+metadata = list(from_tool = "rkmh_classify"),
+glob = '"std.out"')
+  
+)
+
+```
+
+### Portability {.tabset}
+
+#### docker 
+
+``` erictdawson/rkmh:latest ```
+
+#### tool object
+
+```{r 5 create tool object}
+
+tool <- Tool(
+id = "rkmh classify", 
+label = "rkmh classify",
+hints = requirements(docker(pull = "cgrlab/rkmh:latest"), cpu(1), mem(1000)),
+
+baseCommand = "rkmh classify",
+
+stdout = "std.out",
+
+inputs = inputs,
+  
+arguments = arguments,
+  
+outputs = outputs)
+
+```
+
+#### CWL File
+
+```{r eval=create_cwl=="yes"}
+
+write(tool$toJSON(pretty = TRUE), "../rkmh_classify.json")
+
+```
+
+#### Push App To CGC Platform
+
+```{r eval=platform_push=="yes"}
+
+project$app_add("rkmh-classify", tool)
+
+
+```
