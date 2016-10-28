@@ -845,7 +845,7 @@ int main_stream(int argc, char** argv){
                 // so I can get my
                 // classification
                 tuple<string, int, int, bool> result;
-                result = classify_and_count_depth_filter(ref_keys, ref_mins, mins, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size, min_depth);
+                result = classify_and_count_diff_filter(ref_keys, ref_mins, mins, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size, min_diff);
                 
                 bool depth_filter = sketch_len <= 0; 
                 bool match_filter = std::get<1>(result) < min_matches;
