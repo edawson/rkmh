@@ -12,27 +12,30 @@ else
 	CXXFLAGS:= -O3 -std=c++11 -fopenmp -mtune=native -ggdb
 endif
 
+SRC_DIR:=src
+
 LD_INC_FLAGS:= -Imkmh -Imkmh/murmur3 -I. #-Ikseq
 LD_LIB_FLAGS:= -Lmkmh/murmur3 -Lmkmh -lmkmh -lz -lmurmur3
 
-rkmh: rkmh.o equiv.hpp mkmh/libmkmh.a HASHTCounter.o
-	$(CXX) $(CXXFLAGS) -o $@ $< HASHTCounter.o $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
+rkmh: $(SRC_DIR)/rkmh.o $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a $(SRC_DIR)/HASHTCounter.o
+	$(CXX) $(CXXFLAGS) -o $@ $< $(SRC_DIR)/HASHTCounter.o $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
-rkmh.o: rkmh.cpp equiv.hpp mkmh/libmkmh.a HASHTCounter.o
+$(SRC_DIR)/rkmh.o: $(SRC_DIR)/rkmh.cpp $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a $(SRC_DIR)/HASHTCounter.o
 	$(CXX) $(CXXFLAGS) -c -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
-static: rkmh.cpp equiv.hpp mkmh/libmkmh.a
+static: $(SRC_DIR)/rkmh.cpp $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a
 	$(CXX) $(CXXFLAGS) $(STATIC_FLAG) -o rkmh $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
 mkmh/libmkmh.a: mkmh/mkmh.cpp mkmh/mkmh.hpp
 	cd mkmh && $(MAKE) clean && $(MAKE)
 
-HASHTCounter.o: HASHTCounter.cpp HASHTCounter.hpp
+$(SRC_DIR)/HASHTCounter.o: $(SRC_DIR)/HASHTCounter.cpp $(SRC_DIR)/HASHTCounter.hpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
 
 .PHONY: clean clobber lib static
 
 clean:
-	$(RM) *.o
+	$(RM) $(SRC_DIR)/*.o
+	cd mkmh && $(MAKE) clean
 	$(RM) rkmh
