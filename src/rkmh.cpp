@@ -597,7 +597,7 @@ int main_stream(int argc, char** argv){
 
     if (sketch_size == -1){
         cerr << "Sketch size unset." << endl
-            << "Will use the default sketch size of n = 10000" << endl;
+            << "Will use the default sketch size of s = 10000" << endl;
         sketch_size = 1000;
     }
 
@@ -984,7 +984,7 @@ int main_call(int argc, char** argv){
 
     if (sketch_size == -1){
         cerr << "Sketch size unset." << endl
-            << "Will use the default sketch size of n = 10000" << endl;
+            << "Will use the default sketch size of s = 10000" << endl;
         sketch_size = 10000;
     }
 
@@ -1818,7 +1818,7 @@ int main_classify(int argc, char** argv){
 
     if (sketch_size == -1){
         cerr << "Sketch size unset." << endl
-            << "Will use the default sketch size of n = 1000" << endl;
+            << "Will use the default sketch size of s = 1000" << endl;
         sketch_size = 1000;
     }
 
