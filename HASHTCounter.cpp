@@ -39,8 +39,24 @@ namespace HTC{
     }
 
     void HASHTCounter::size(int sz){
+        
+        delete [] counts;
         my_size = sz;
         counts = new int [my_size];
+
+    }
+
+    // TODO: not at all guaranteed safe.
+    // Division / positioning in new array is uncheck, and wrong.
+    void HASHTCounter::resize(int sz){
+        
+        int* n_counts = new int [ sz ];
+        for (int i = 0; i < my_size; i++){
+            *(n_counts + (i % sz)) = *(counts + i);    
+        }
+        my_size = sz;
+        delete [] counts;
+        counts = n_counts;
     }
 
     int& HASHTCounter::operator[](htc_type key){
