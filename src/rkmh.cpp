@@ -873,6 +873,8 @@ int main_stream(int argc, char** argv){
     delete [] read_min_lens;
     delete [] read_min_starts;
     delete [] ref_min_starts;
+    
+    return 0;
 
 
 
