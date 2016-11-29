@@ -1,0 +1,105 @@
+{
+  "sbg:id": "rkmh",
+  "id": "#rkmh",
+  "inputs": [
+    {
+      "type": ["null", "File"],
+      "label": "reference",
+      "description": "reference",
+      "streamable": false,
+      "default": "",
+      "id": "#reference",
+      "inputBinding": {
+        "position": 0,
+        "prefix": "-r",
+        "separate": true,
+        "sbg:cmdInclude": true
+      },
+      "required": false
+    },
+    {
+      "type": ["null", "File"],
+      "label": "fastq",
+      "description": "fastq",
+      "streamable": false,
+      "default": "",
+      "id": "#fastq",
+      "inputBinding": {
+        "position": 0,
+        "prefix": "-f",
+        "separate": true,
+        "sbg:cmdInclude": true
+      },
+      "required": false
+    },
+    {
+      "type": ["null", "int"],
+      "label": "kmer size",
+      "description": "the kmer size to use for hashing",
+      "streamable": false,
+      "default": "",
+      "id": "#kmer_size",
+      "inputBinding": {
+        "position": 0,
+        "prefix": "-k",
+        "separate": true,
+        "sbg:cmdInclude": true
+      },
+      "required": false
+    }
+  ],
+  "outputs": [
+    {
+      "type": [
+        "null",
+        {
+          "items": "File",
+          "type": "array"
+        }
+      ],
+      "label": "std_out",
+      "description": "standard output",
+      "streamable": false,
+      "default": "",
+      "id": "#std_out",
+      "outputBinding": {
+        "glob": "\"std.out\"",
+        "sbg:metadata": {
+          "org": "cgp"
+        }
+      }
+    }
+  ],
+  "requirements": [],
+  "hints": [
+    {
+      "class": "DockerRequirement",
+      "dockerPull": "erictdawson/rkmh:latest"
+    },
+    {
+      "class": "sbg:CPURequirement",
+      "value": 1
+    },
+    {
+      "class": "sbg:MemRequirement",
+      "value": 1000
+    }
+  ],
+  "label": "rkmh",
+  "class": "CommandLineTool",
+  "baseCommand": [
+    "classify"
+  ],
+  "arguments": [
+    {
+      "position": 99,
+      "separate": true,
+      "valueFrom": {
+        "engine": "#cwl-js-engine",
+        "script": "\"&& ls -lR\"",
+        "class": "Expression"
+      }
+    }
+  ],
+  "stdout": "std.out"
+}
