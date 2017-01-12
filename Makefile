@@ -16,6 +16,7 @@ SRC_DIR:=src
 
 LD_INC_FLAGS:= -Imkmh -Imkmh/murmur3 -I. #-Ikseq
 LD_LIB_FLAGS:= -Lmkmh/murmur3 -Lmkmh -lmkmh -lz -lmurmur3
+STATIC_FLAG:= -static
 
 rkmh: $(SRC_DIR)/rkmh.o $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a $(SRC_DIR)/HASHTCounter.o
 	$(CXX) $(CXXFLAGS) -o $@ $< $(SRC_DIR)/HASHTCounter.o $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
