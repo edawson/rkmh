@@ -148,10 +148,13 @@ void help_call(char** argv){
 void help_hash(char** argv){
     cerr << "Usage: " << argv[0] << " hash [options]" << endl
         << "Options:" << endl
-        << "--fasta/-f  <FASTA> fasta file to hash." << endl
-        << "--reference/-r  <REF> reference file to hash." << endl
-        << "--sketch-size/-s <SKETCHSIZE>   sketch size." << endl
-        << "--threads/-t    <THREADS>   number of OpenMP threads to utilize." << endl;
+        << "--fasta/-f  <FASTA>          fasta file to hash." << endl
+        << "--reference/-r   <REF>       reference file to hash." << endl
+        << "--sketch-size/-s <SKTCHSZ>   sketch size." << endl
+        << "--kmer/-k <KMER>             kmer size to hash." << endl
+        << "--min-kmer-occurrence <M>    Minimum kmer occurrence. Failing kmers are removed from sketch." << endl
+        << "--min-informative/-I  <I>    Maximum number of samples a kmer can occur in before it is removed" << endl
+        << "--threads/-t <THREADS>       number of OpenMP threads to utilize." << endl;
 }
 
 void help_stream(char** argv){
@@ -372,10 +375,10 @@ void hash_sequences(vector<string>& keys,
 
 }
 
-json dump_hash_json(string key, int seqlen,
+json dump_hash_json(string key, int seqLen,
         vector<hash_t> mins,
         vector<int> kmer, 
-        int sketch_size,
+        int sketchLen,
         string alphabet = "ATGC",
         string hash_type = "MurmurHash3_x64_128",
         bool canonical = true,
@@ -399,10 +402,10 @@ json dump_hash_json(string key, int seqlen,
     j["hashType"] = hash_type;
     j["hashBits"] = hash_bits;
     j["hashSeed"] = hash_seed;
-    j["sketchSize"] = sketch_size;
+    j["seqLen"] = seqLen;
     j["sketches"] = {
         {"name", key},
-        {"length", seqlen},
+        {"length", sketchLen},
         {"comment", ""},
         {"hashes", mins}
     };
@@ -1628,22 +1631,58 @@ int main_hash(int argc, char** argv){
 #pragma omp master
     cerr << ref_keys.size() << " references and " << read_keys.size() << " reads parsed and hashed." << endl;
 
-    vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
-
 #pragma omp parallel
     {
 
 #pragma omp for
         for (int i = 0; i < ref_keys.size(); i++){
-            /*
+                int sketch_len = 0;
+                vector<hash_t> ref_mins(sketch_size);
+
+                if (max_samples < 10000){
+                for (int j = 0; j < ref_hash_nums[i], sketch_len < sketch_size; ++j){
+                    //if (ref_sketch_lens[i] >= sketch_size){
+                    //    break;
+                    //}
+                    hash_t curr = *(ref_hashes[i] + j);
+                    //cerr << ref_hash_counter.get(curr) << endl;
+                    if (curr != 0 && refhtc.get(curr) <= max_samples){
+                        ref_mins[sketch_len] = curr;
+                        //ref_mins[i][ref_min_lens[i]] = ref_hashes[i][j];
+                        ++sketch_len;
+                        if (sketch_len == sketch_size){
+                            break;
+                        }
+                    }
+                    else{
+                        continue;
+                    }
+                }
+
+            }
+            else{
+                int start_offset = 0;
+                while (ref_hashes[i][start_offset] == 0 && start_offset < ref_lens[i]){
+                    ++start_offset;
+                }
+                for (int j = start_offset; j < ref_lens[i], sketch_len < sketch_size; ++j){
+                    ref_mins[ sketch_len] = *(ref_hashes[i] + j);
+                    ++sketch_len;
+                }
+
+            }
+
+
+
+               //vector<hash_t> temp(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
                json jj = dump_hash_json(ref_keys[i],
                ref_lens[i],
-               ref_mins[i],
+               ref_mins,
                kmer,
-               sketch_size
+               sketch_len
                );
+                #pragma omp critical
                cout << jj.dump(4) << endl;
-               */
         }
 
 #pragma omp for
