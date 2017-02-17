@@ -19,6 +19,14 @@ namespace HTC{
         my_size = 0;
     }
 
+    string HASHTCounter::to_string(){
+        stringstream sst;
+        for (int i = 0; i < my_size; ++i){
+            sst << counts[i] << endl;
+        }
+        return sst.str();
+    }
+
     void HASHTCounter::increment(htc_type key){
         //cout << (++counts [ key % my_size ]) << endl;
         #pragma omp atomic update

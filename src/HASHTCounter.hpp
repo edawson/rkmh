@@ -4,6 +4,9 @@
 #include <cstdint>
 #include <iostream>
 #include <omp.h>
+#include <cstdio>
+#include <sstream>
+
 
 namespace HTC{
     typedef uint64_t htc_type;
@@ -24,10 +27,13 @@ class HASHTCounter{
         void size(int sz);
 
         int* begin(void);
+
+        std::string to_string();
         
     private:
         int my_size;
         int* counts;
+        std::string my_big_string;
         
 };
 }
