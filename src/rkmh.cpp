@@ -659,8 +659,8 @@ int main_stream(int argc, char** argv){
     int* read_min_lens = new int [read_keys.size() ];
 
 
-    HASHTCounter read_hash_counter(1000000);
-    HASHTCounter ref_hash_counter(1000000);
+    HASHTCounter read_hash_counter(10000000);
+    HASHTCounter ref_hash_counter(10000000);
 
     vector<vector<string> > results(threads);
 
@@ -723,7 +723,7 @@ int main_stream(int argc, char** argv){
 
         // Classify existing reads
         // conveniently, read_keys.size() will be zero if there are no reads.
-        #pragma omp for
+#pragma omp for
         for (int i = 0; i < read_keys.size(); i++){
             stringstream outre;
             read_mins[i] = new hash_t[ sketch_size ];
@@ -733,9 +733,9 @@ int main_stream(int argc, char** argv){
             if (doReadDepth){
                 for (int j = 0; j < read_hash_lens[i]; ++j){
 
-                    if (read_hashes[i][j] != 0 && read_hash_counter.get(read_hashes[i][j]) > min_kmer_occ){
+                    if (read_hashes[i][j] != 0 && read_hash_counter.get(read_hashes[i][j]) >= min_kmer_occ){
                         read_mins[i][read_min_lens[i]] = *(read_hashes[i] + j);
-                        
+
                         ++(read_min_lens[i]);
                         if (read_min_lens[i] == sketch_size){
                             break;
@@ -788,86 +788,86 @@ int main_stream(int argc, char** argv){
         }
     }
 
-        // Take in a quartet of lines from STDIN (FASTQ format??)
-        // or perhaps just individual read sequences and names (or give them names dynamically
-        // hash them, possibly with kmer depth filtering,
-        // create a sketch, then classify and report the classification.
-        //
-        // Thanks heavens for https://biowize.wordpress.com/2013/03/05/using-kseq-h-with-stdin/
+    // Take in a quartet of lines from STDIN (FASTQ format??)
+    // or perhaps just individual read sequences and names (or give them names dynamically
+    // hash them, possibly with kmer depth filtering,
+    // create a sketch, then classify and report the classification.
+    //
+    // Thanks heavens for https://biowize.wordpress.com/2013/03/05/using-kseq-h-with-stdin/
 
-        if (streamify_me_capn){
-            FILE *instream = NULL;
-            instream = stdin;
+    if (streamify_me_capn){
+        FILE *instream = NULL;
+        instream = stdin;
 
-            gzFile fp = gzdopen(fileno(instream), "r");
-            kseq_t *seq = kseq_init(fp);
+        gzFile fp = gzdopen(fileno(instream), "r");
+        kseq_t *seq = kseq_init(fp);
+        stringstream outre;
+        while (kseq_read(seq) >= 0){
+            to_upper(seq->seq.s, seq->seq.l);
+
+            string name = string(seq->name.s);
+            int len = seq->seq.l;
+
+            // hash me
+            tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
             stringstream outre;
-            while (kseq_read(seq) >= 0){
-                to_upper(seq->seq.s, seq->seq.l);
 
-                string name = string(seq->name.s);
-                int len = seq->seq.l;
-            
-                // hash me
-                tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
-                stringstream outre;
+            hash_t* hashes = std::get<0>(hashes_and_num);
+            int hashlen = std::get<1>(hashes_and_num);
 
-                hash_t* hashes = std::get<0>(hashes_and_num);
-                int hashlen = std::get<1>(hashes_and_num);
-
-                std::sort(hashes, hashes + hashlen);
-                // and then just sketch me
-                // TODO need to handle some read_depth
-                int sketch_start = 0;
-                int sketch_len = 0;
-                hash_t* mins = new hash_t[sketch_size];
-                if (min_kmer_occ > 0){
-                    for (int i = 0; i < hashlen; ++i){
-                        hash_t curr = *(hashes + i);
-                        if (read_hash_counter.get(curr) >= min_kmer_occ && curr != 0){
-                            mins[sketch_len] = curr;
-                            ++sketch_len;
-                        }
-                        if (sketch_len == sketch_size){
-                            break;
-                        }
+            std::sort(hashes, hashes + hashlen);
+            // and then just sketch me
+            // TODO need to handle some read_depth
+            int sketch_start = 0;
+            int sketch_len = 0;
+            hash_t* mins = new hash_t[sketch_size];
+            if (min_kmer_occ > 0){
+                for (int i = 0; i < hashlen; ++i){
+                    hash_t curr = *(hashes + i);
+                    if (read_hash_counter.get(curr) >= min_kmer_occ && curr != 0){
+                        mins[sketch_len] = curr;
+                        ++sketch_len;
+                    }
+                    if (sketch_len == sketch_size){
+                        break;
                     }
                 }
-                else{
-                    while (hashes[sketch_start] == 0 && sketch_start < hashlen){
-                        ++sketch_start;
-                    }
-                    for (int i = sketch_start; i < hashlen; ++i){
-                        mins[sketch_len++] = *(hashes + i);
-                        if (sketch_len == sketch_size){
-                            break;
-                        }
-                    }
-                }
-                sketch_start = 0;
-                // so I can get my
-                // classification
-                tuple<string, int, int, bool> result;
-                result = classify_and_count_diff_filter(ref_keys, ref_mins, mins, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size, min_diff);
-                
-                bool depth_filter = sketch_len <= 0; 
-                bool match_filter = std::get<1>(result) < min_matches;
-
-                outre  << "Sample: " << name << "\t" << "Result: " << 
-                            std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
-                            (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
-
-                #pragma omp critical
-                cout << outre.str();
-                outre.str("");
-
-                delete [] hashes;
-                delete [] mins;
-
-                // classification
             }
-            kseq_destroy(seq);
-            gzclose(fp);
+            else{
+                while (hashes[sketch_start] == 0 && sketch_start < hashlen){
+                    ++sketch_start;
+                }
+                for (int i = sketch_start; i < hashlen; ++i){
+                    mins[sketch_len++] = *(hashes + i);
+                    if (sketch_len == sketch_size){
+                        break;
+                    }
+                }
+            }
+            sketch_start = 0;
+            // so I can get my
+            // classification
+            tuple<string, int, int, bool> result;
+            result = classify_and_count_diff_filter(ref_keys, ref_mins, mins, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size, min_diff);
+
+            bool depth_filter = sketch_len <= 0; 
+            bool match_filter = std::get<1>(result) < min_matches;
+
+            outre  << "Sample: " << name << "\t" << "Result: " << 
+                std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
+                (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
+
+#pragma omp critical
+            cout << outre.str();
+            outre.str("");
+
+            delete [] hashes;
+            delete [] mins;
+
+            // classification
+        }
+        kseq_destroy(seq);
+        gzclose(fp);
 
     }
 
@@ -876,7 +876,7 @@ int main_stream(int argc, char** argv){
     delete [] read_min_lens;
     delete [] read_min_starts;
     delete [] ref_min_starts;
-    
+
     return 0;
 
 
@@ -1636,10 +1636,10 @@ int main_hash(int argc, char** argv){
 
 #pragma omp for
         for (int i = 0; i < ref_keys.size(); i++){
-                int sketch_len = 0;
-                vector<hash_t> ref_mins(sketch_size);
+            int sketch_len = 0;
+            vector<hash_t> ref_mins(sketch_size);
 
-                if (max_samples < 10000){
+            if (max_samples < 10000){
                 for (int j = 0; j < ref_hash_nums[i], sketch_len < sketch_size; ++j){
                     //if (ref_sketch_lens[i] >= sketch_size){
                     //    break;
@@ -1674,84 +1674,105 @@ int main_hash(int argc, char** argv){
 
 
 
-               //vector<hash_t> temp(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
-               json jj = dump_hash_json(ref_keys[i],
-               ref_lens[i],
-               ref_mins,
-               kmer,
-               sketch_len
-               );
-                #pragma omp critical
-               cout << jj.dump(4) << endl;
+            //vector<hash_t> temp(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
+            json jj = dump_hash_json(ref_keys[i],
+                    ref_lens[i],
+                    ref_mins,
+                    kmer,
+                    sketch_len
+                    );
+#pragma omp critical
+            cout << jj.dump(4) << endl;
         }
 
 #pragma omp for
         for (int i = 0; i < read_keys.size(); i++){
-            /** 
-              json jj = dump_hash_json(read_keys[i],
-              read_lens[i],
-              mins,
-              kmer,
-              sketch_size
-              );
-              cout << jj.dump(4) << endl;
-            //exit(1);
-             **/
 
-        }
+            vector<hash_t> read_mins;
+            std::sort(read_hashes[i], read_hashes[i] + read_lens[i]);
+            if (doReadDepth){
+                for (int j = 0; j < read_lens[i]; ++j){
+                    if (read_hashes[i][j] != 0 && readhtc.get( read_hashes[i][j] ) > min_kmer_occ){
+                            read_mins.push_back(read_hashes[i][j]);
+                            if (read_hashes.size() >= sketch_size){
+                                break;
+                            }
+                    }
+                }
+            }
+            else{
 
-    }
-    // makes an outbase.rdepth file
-    if (doReadDepth){
-        if (!outname.empty()){
-            vector<string> splits = split(outname, '.');
-            vector<string> o_base_splits(splits.begin(), splits.end() - 1);
-            o_base_splits.push_back("rkmh.rdepth");
-            outname = join(o_base_splits, ".");
-        }
-        else{
-            outname = "out.rkmh.rdepth";
-        }
-        ofstream ofi;
-        ofi.open(outname);
+            }
 
-
-        for (int i = 0; i < readhtc.size(); i++){
-            ofi << readhtc[i] << "\n";
-        }
-        ofi.close();
-
-    }
-    // makes an outbase.rsamp
-    if (doReferenceDepth){
-        if (!outname.empty()){
-            vector<string> splits = split(outname, '.');
-            vector<string> o_base_splits(splits.begin(), splits.end() - 1);
-            o_base_splits.push_back("rkmh.rsamp");
-            outname = join(o_base_splits, ".");
-        }
-        else{
-            outname = "out.rkmh.rsamp";
-        }
-        ofstream ofi;
-        ofi.open(outname);
-
-
-        for (int i = 0; i < refhtc.size(); i++){
-            ofi << refhtc[i] << "\n";
-        }
-        ofi.close();
-
-
+            json jj = dump_hash_json(read_keys[i],
+                read_lens[i],
+                read_mins,
+                kmer,
+                sketch_size
+                );
+#pragma omp critical
+        cout << jj.dump(4) << endl;
 
     }
 
+}
+// makes an outbase.rdepth file
+if (doReadDepth){
+    if (!outname.empty()){
+        vector<string> splits = split(outname, '.');
+        vector<string> o_base_splits(splits.begin(), splits.end() - 1);
+        o_base_splits.push_back("rkmh.rdepth");
+        outname = join(o_base_splits, ".");
+    }
+    else{
+        outname = "out.rkmh.rdepth";
+    }
+    ofstream ofi;
+    ofi.open(outname);
+
+    /**
+      for (int i = 0; i < readhtc.size(); i++){
+      ofi << readhtc[i] << "\n";
+      }
+     **/
+    ofi << readhtc.to_string() << endl;
+    ofi.close();
+
+}
+// makes an outbase.rsamp
+if (doReferenceDepth){
+    if (!outname.empty()){
+        vector<string> splits = split(outname, '.');
+        vector<string> o_base_splits(splits.begin(), splits.end() - 1);
+        o_base_splits.push_back("rkmh.rsamp");
+        outname = join(o_base_splits, ".");
+    }
+    else{
+        outname = "out.rkmh.rsamp";
+    }
+    ofstream ofi;
+    ofi.open(outname);
+
+    /**
+      for (int i = 0; i < refhtc.size(); i++){
+      ofi << refhtc[i] << "\n";
+      }
+
+     **/
+
+    ofi << refhtc.to_string() << endl;
+    ofi.close();
+
+
+
+}
 
 
 
 
 
-    return 0;
+
+return 0;
 }
 
 
@@ -1971,9 +1992,9 @@ int main_classify(int argc, char** argv){
             if (max_samples < 10000){
                 for (int j = 0; j < ref_hash_nums[i]; j++){
                     if (ref_hashes[i][j] != 0 && ref_hash_to_num_samples[ref_hashes[i][j]] <= max_samples)
-                         ref_sketches[i][ref_sketch_lens[i]] = ref_hashes[i][j];
-                        ++ref_sketch_lens[i];
-                   
+                        ref_sketches[i][ref_sketch_lens[i]] = ref_hashes[i][j];
+                    ++ref_sketch_lens[i];
+
                     if (ref_sketch_lens[i] >= sketch_size){
                         break;
                     }
