@@ -518,6 +518,7 @@ int main_stream(int argc, char** argv){
             {"threads", required_argument, 0, 't'},
             {"min-kmer-occurence", required_argument, 0, 'M'},
             {"min-matches", required_argument, 0, 'N'},
+            {"min-diff", required_argument, 0, 'D'},
             {"max-samples", required_argument, 0, 'I'},
             {"pre-reads", required_argument, 0, 'F'},
             {"pre-references", required_argument, 0, 'R'},
@@ -528,7 +529,7 @@ int main_stream(int argc, char** argv){
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hdk:f:r:s:S:t:M:N:I:R:F:p:q:i", long_options, &option_index);
+        c = getopt_long(argc, argv, "hdk:f:r:s:S:t:M:N:I:R:F:p:q:iD:", long_options, &option_index);
         if (c == -1){
             break;
         }
@@ -560,6 +561,9 @@ int main_stream(int argc, char** argv){
                 break;
             case 'N':
                 min_matches = atoi(optarg);
+                break;
+            case 'D':
+                min_diff = atoi(optarg);
                 break;
             case '?':
             case 'h':
@@ -593,7 +597,7 @@ int main_stream(int argc, char** argv){
 
     if (sketch_size == -1){
         cerr << "Sketch size unset." << endl
-            << "Will use the default sketch size of n = 10000" << endl;
+            << "Will use the default sketch size of s = 1000" << endl;
         sketch_size = 1000;
     }
 
@@ -735,7 +739,7 @@ int main_stream(int argc, char** argv){
                     ++ref_min_starts[i];
                 }
                 for (int j = ref_min_starts[i]; j < ref_hash_lens[i], ref_min_lens[i] < sketch_size; ++j){
-                    ref_mins[i][ref_min_lens[i]] = *(ref_hashes[i] + j);
+                    *(ref_mins[i] +ref_min_lens[i]) = *(ref_hashes[i] + j);
                     ++ref_min_lens[i];
                 }
 
@@ -775,16 +779,19 @@ int main_stream(int argc, char** argv){
                 while (read_hashes[i][ read_min_starts[i] ] == 0 && read_min_starts[i] < read_hash_lens[i]){
                     ++read_min_starts[i];
                 }
-                for (int j = read_min_starts[i]; j < read_hash_lens[i], read_min_lens[i] < sketch_size; ++j){
+                for (int j = read_min_starts[i]; j < read_hash_lens[i]; ++j){
                     read_mins[i][read_min_lens[i]] = *(read_hashes[i] + j);
-                    ++read_min_lens[i];
+                    ++(read_min_lens[i]);
+                    if (read_min_lens[i] == sketch_size){
+                        break;
+                    }
                 }
             }
             read_min_starts[i] = 0;
             delete [] read_hashes[i];
 
-            tuple<string, int, int> result;
-            result = classify_and_count(ref_keys, ref_mins, read_mins[i], ref_min_starts, read_min_starts[i], ref_min_lens, read_min_lens[i], sketch_size);
+            tuple<string, int, int, bool> result;
+            result = classify_and_count_diff_filter(ref_keys, ref_mins, read_mins[i], ref_min_starts, read_min_starts[i], ref_min_lens, read_min_lens[i], sketch_size, min_diff);
 
 
             bool depth_filter = read_min_lens[i] <= 0; 
@@ -792,7 +799,7 @@ int main_stream(int argc, char** argv){
 
             outre  << "Sample: " << read_keys[i] << "\t" << "Result: " << 
                 std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
-                (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
+                (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
 
             //#pragma omp critical
             //cout << outre.str();
@@ -878,18 +885,18 @@ int main_stream(int argc, char** argv){
                                 }
                             }
                         }
-                        sketch_start = 0;
-                        // so I can get my
-                        // classification
-                        tuple<string, int, int> result;
-                        result = classify_and_count(ref_keys, ref_mins, mins, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size);
-
-                        bool depth_filter = sketch_len <= 0; 
-                        bool match_filter = std::get<1>(result) < min_matches;
+                sketch_start = 0;
+                // so I can get my
+                // classification
+                tuple<string, int, int, bool> result;
+                result = classify_and_count_diff_filter(ref_keys, ref_mins, mins, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size, min_diff);
+                
+                bool depth_filter = sketch_len <= 0; 
+                bool match_filter = std::get<1>(result) < min_matches;
 
                         outre  << "Sample: " << name << "\t" << "Result: " << 
                             std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
-                            (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
+                            (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
 
                         //#pragma omp critical
                         cout << outre.str();
@@ -1020,11 +1027,11 @@ int main_stream(int argc, char** argv){
             }
         }
 
-        if (sketch_size == -1){
-            cerr << "Sketch size unset." << endl
-                << "Will use the default sketch size of n = 10000" << endl;
-            sketch_size = 10000;
-        }
+    if (sketch_size == -1){
+        cerr << "Sketch size unset." << endl
+            << "Will use the default sketch size of s = 1000" << endl;
+        sketch_size = 1000;
+    }
 
         if (kmer.size() == 0){
             cerr << "No kmer size(s) provided. Will use a default kmer size of 16." << endl;
@@ -1896,11 +1903,11 @@ int main_stream(int argc, char** argv){
             }
         }
 
-        if (sketch_size == -1){
-            cerr << "Sketch size unset." << endl
-                << "Will use the default sketch size of n = 1000" << endl;
-            sketch_size = 1000;
-        }
+    if (sketch_size == -1){
+        cerr << "Sketch size unset." << endl
+            << "Will use the default sketch size of s = 1000" << endl;
+        sketch_size = 1000;
+    }
 
         if (kmer.size() == 0){
             cerr << "No kmer size(s) provided. Will use a default kmer size of 16." << endl;
