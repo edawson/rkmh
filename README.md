@@ -27,6 +27,26 @@ The only external dependencies should be zlib and a compiler supporting OpenMP. 
 
 This should build rkmh and its library dependencies (mkmh and murmur3).
 
+
+### *NEW*: Stream
+rkmh can now stream reads through, using roughly constant memory. This is useful in read filtration workflows.
+This command functions almost identically to `classify` and performs the same read classification task by default:
+
+```rkmh stream -r refs.fa -f reads.fa -k 12 -s 1000```  
+
+
+But also permits this:  
+
+```cat reads.fq | ./rmkmh stream -i -r refs.fa -k 12 -s 1000```  
+
+which should use less memory (because only one sketch per thread is kept in memory at any given time).
+
+The `-M` flag will have no effect (currently) on stream reads. I'm working on methods to prehash the read depth filters
+and pass them as files to rkmh.
+
+`-I` still works, however references are still built in memory. We advise not doing big reference (e.g. the Human genome)
+quite yet. Wait for the next release.
+
 ### Classify 
 rkmh requires a set of reads and a set of references in the FASTA/FASTQ format. Reads need not
 be in FASTQ format.

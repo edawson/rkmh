@@ -3,6 +3,7 @@
 #define HTC_HPP
 #include <cstdint>
 #include <iostream>
+#include <omp.h>
 
 namespace HTC{
     typedef uint64_t htc_type;
@@ -16,6 +17,8 @@ class HASHTCounter{
 
         void increment(htc_type key);
         int& get(htc_type key);
+
+        void get(htc_type key, int& ret);
 
         int size(void);
         void size(int sz);

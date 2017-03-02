@@ -227,6 +227,63 @@ inline tuple<string, int, int> classify_and_count(vector<string> ref_keys, vecto
 
 
 
+inline tuple<string, int, int, bool> classify_and_count_diff_filter(vector<string> ref_keys, vector<hash_t*> ref_mins, hash_t* read_mins,
+                                                    int* ref_starts, int read_start,
+                                                    int* ref_lens, int read_len,
+                                                    int sketch_size, int min_diff){
+    int max_shared = 0;
+    int prev_best = 0;
+    string sample = "";
+    int shared_inter = 0;
+    int total_union = 0;
+  
+    /*
+     *  std::tuple<hash_t*, int> hash_intersection(hash_t* alpha, int alpha_len, int alpha_start,
+     *                                                              hash_t* beta, int beta_len, int beta_start,
+     *                                                                                                                          int sketch_size){
+     * */
+    for (int i = 0; i < ref_keys.size(); i++){
+        std::tuple<hash_t*, int> inter = hash_intersection(ref_mins[i], ref_starts[i], ref_lens[i], read_mins, read_start, read_len, sketch_size);
+        int shared = std::get<1>(inter);
+        if (shared > max_shared){
+            prev_best = max_shared;
+            max_shared = shared;
+            sample = ref_keys[i];
+            shared_inter = shared;
+            total_union = read_len < ref_lens[i] ? read_len : ref_lens[i];
+        }
+        delete [] std::get<0>(inter);
+
+    }
+    return std::make_tuple(sample, shared_inter, total_union, (max_shared - prev_best > min_diff));
+};
+inline tuple<string, int, int> classify_and_count_par(vector<string>& ref_keys, vector<hash_t*>& ref_mins, hash_t* read_mins,
+                                                    int* ref_starts, int& read_start,
+                                                    int* ref_lens, int& read_len,
+                                                    int& sketch_size){
+    int max_shared = 0;
+    string sample = "";
+    int shared_inter = 0;
+    int total_union = 0;
+  
+    for (int i = 0; i < ref_keys.size(); i++){
+        std::tuple<hash_t*, int> inter = hash_intersection(ref_mins[i], ref_starts[i], ref_lens[i], read_mins, read_start, read_len, sketch_size);
+        int shared = std::get<1>(inter);
+        if (shared > max_shared){
+            sample = ref_keys[i];
+            max_shared = shared;
+            shared_inter = shared;
+            total_union = read_len < ref_lens[i] ? read_len : ref_lens[i];
+        }
+        delete [] std::get<0>(inter);
+
+    }
+    return std::make_tuple(sample, shared_inter, total_union);
+};
+
+
+
+
 inline tuple<string, int, int> classify_and_count(vector<hash_t>& read_hashes, map<string, vector<hash_t> >& ref_to_hashes){
      //Parallel compare through the map would be really nice...
     int max_shared = 0;
