@@ -2187,6 +2187,8 @@ int main_stream(int argc, char** argv){
                   vector<int> ref_lens, int read_len,
                   int sketch_size){
                   */
+
+   /**             
                 tuple<string, int, int> result;
                 result = classify_and_count(ref_keys, ref_sketches, read_sketches[i], ref_sketch_starts, read_sketch_starts[i], ref_sketch_lens, read_sketch_lens[i], sketch_size);
 
@@ -2197,6 +2199,22 @@ int main_stream(int argc, char** argv){
                 outre  << "Sample: " << read_keys[i] << "\t" << "Result: " << 
                     std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
                     (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
+
+**/
+
+            tuple<string, int, int, bool> result;
+            result = classify_and_count_diff_filter(ref_keys, ref_sketches, read_sketches[i], ref_sketch_starts, read_sketch_starts[i], ref_sketch_lens, read_sketch_lens[i], sketch_size, min_diff);
+
+
+            bool depth_filter = read_sketch_lens[i] <= 0; 
+            bool match_filter = std::get<1>(result) < min_matches;
+
+            outre  << "Sample: " << read_keys[i] << "\t" << "Result: " << 
+                std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
+                (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
+
+
+
 
 #pragma omp critical
                 cout << outre.str();
