@@ -22,6 +22,10 @@ class HASHTCounter{
 
         int size(void);
         void size(int sz);
+        void resize(int sz);
+        inline void set(int pos, int val){
+            *(counts + pos) = val;
+        };
 
         int* begin(void);
         
