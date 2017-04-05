@@ -884,6 +884,152 @@ int main_stream(int argc, char** argv){
 }
 
 
+/**
+ * Filter indidvidual sequencing reads based on their % match to a panel
+ * of reference MinHash sketches.
+ * */
+int main_filter(int argc, char** argv){
+    
+    vector<char*> ref_files;
+    vector<char*> read_files;
+
+    vector<int> kmer;
+
+    int sketch_size = 1000;
+    int threads = 1;
+    int min_kmer_occ = 1;
+    int min_matches = -1;
+    int min_diff = 0;
+    int max_samples = 1000000;
+    int window_len = 100;
+
+    bool show_depth = false;
+
+    int c;
+    int optind = 2;
+
+    if (argc <= 2){
+        help_call(argv);
+        exit(1);
+    }
+
+    while (true){
+        static struct option long_options[] =
+        {
+            {"help", no_argument, 0, 'h'},
+            {"kmer", no_argument, 0, 'k'},
+            {"fasta", required_argument, 0, 'f'},
+            {"reference", required_argument, 0, 'r'},
+            {"sketch", required_argument, 0, 's'},
+            {"threads", required_argument, 0, 't'},
+            {"min-kmer-occurence", required_argument, 0, 'M'},
+            {"min-matches", required_argument, 0, 'N'},
+            {"show-depth", required_argument, 0, 'd'},
+            {"max-samples", required_argument, 0, 'I'},
+            {"window-len", required_argument, 0, 'w'},
+            {0,0,0,0}
+        };
+
+        int option_index = 0;
+        c = getopt_long(argc, argv, "hdk:f:r:s:t:M:N:I:w:", long_options, &option_index);
+        if (c == -1){
+            break;
+        }
+
+        switch (c){
+            case 't':
+                threads = atoi(optarg);
+                break;
+            case 'r':
+                ref_files.push_back(optarg);
+                break;
+            case 'f':
+                read_files.push_back(optarg);
+                break;
+            case 'k':
+                kmer.push_back(atoi(optarg));
+                break;
+            case '?':
+            case 'h':
+                print_help(argv);
+                exit(1);
+                break;
+            case 's':
+                sketch_size = atoi(optarg);
+                break;
+            case 'M':
+                min_kmer_occ = atoi(optarg);
+                break;
+            case 'I':
+                max_samples = atoi(optarg);
+                break;
+            case 'w':
+                window_len = atoi(optarg);
+                break;
+            case 'd':
+                show_depth = true;
+                break;
+            default:
+                print_help(argv);
+                abort();
+
+        }
+    }
+
+    if (sketch_size == -1){
+        cerr << "Sketch size unset." << endl
+            << "Will use the default sketch size of s = 10000" << endl;
+        sketch_size = 10000;
+    }
+
+    if (kmer.size() == 0){
+        cerr << "No kmer size(s) provided. Will use a default kmer size of 16." << endl;
+        kmer.push_back(16);
+    }
+    else if (kmer.size() > 1){
+        cerr << "Only a single kmer size may be used for calling." << endl
+            << "Sizes provided: ";
+        for (auto k : kmer){
+            cerr << k << " ";
+        }
+        cerr << endl;
+        cerr << "Please choose a single kmer size." << endl;
+        exit(1);
+    }
+
+    omp_set_num_threads(threads);
+
+    //TODO switch to c arrays from vectors?
+    // we know the size of these and we carry the lengths around
+
+    vector<string> ref_keys;
+    ref_keys.reserve(500);
+    vector<char*> ref_seqs;
+    ref_seqs.reserve(500);
+    vector<int> ref_lens;
+    ref_lens.reserve(500);
+
+    vector<string> read_keys;
+    read_keys.reserve(2000);
+    vector<char*> read_seqs;
+    read_seqs.reserve(2000);
+    vector<int> read_lens;
+    read_lens.reserve(2000);
+
+   
+
+    // Hash our refs
+    //
+    // For each read:
+    //  hash that read
+    //  compare that read
+    //  if that read passes, spit that read to STDOUT
+    //  write some stats to CERR
+    //  otherwis toss that READ outta here and move on
+    return 0;
+}
+
+
 
 /**
  *
