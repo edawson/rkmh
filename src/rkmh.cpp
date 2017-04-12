@@ -495,6 +495,7 @@ int main_stream(int argc, char** argv){
     int ref_sketch_size = 0;
 
     bool streamify_me_capn = false;
+    bool output_reads = false;
 
     // TODO still need:
     // prehashed depth map for reads/ref
@@ -528,11 +529,12 @@ int main_stream(int argc, char** argv){
             {"read-kmer-map-file", required_argument, 0, 'p'},
             {"ref-kmer-map-file", required_argument, 0, 'q'},
             {"in-stream", no_argument, 0, 'i'},
+            {"read-filter", no_argument, 0, 'z'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hdk:f:r:s:S:t:M:N:I:R:F:p:q:iD:", long_options, &option_index);
+        c = getopt_long(argc, argv, "zhdk:f:r:s:S:t:M:N:I:R:F:p:q:iD:", long_options, &option_index);
         if (c == -1){
             break;
         }
@@ -590,6 +592,9 @@ int main_stream(int argc, char** argv){
                 break;
             case 'i':
                 streamify_me_capn = true;
+                break;
+            case 'z':
+                output_reads = true;
                 break;
             default:
                 print_help(argv);
@@ -853,10 +858,19 @@ int main_stream(int argc, char** argv){
             bool depth_filter = sketch_len <= 0; 
             bool match_filter = std::get<1>(result) < min_matches;
 
+            if (output_reads){
+                if (!depth_filter && !match_filter && std::get<3>(result)){
+                    outre << ">" << seq->name.s << endl
+                        << seq->seq.s << endl
+                        << "+" << endl
+                        << seq->qual.s << endl;
+                    }
+            }
+            else{
             outre  << "Sample: " << name << "\t" << "Result: " << 
                 std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
                 (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
-
+            }
 #pragma omp critical
             cout << outre.str();
             outre.str("");
@@ -926,7 +940,6 @@ int main_filter(int argc, char** argv){
             {"min-matches", required_argument, 0, 'N'},
             {"show-depth", required_argument, 0, 'd'},
             {"max-samples", required_argument, 0, 'I'},
-            {"window-len", required_argument, 0, 'w'},
             {0,0,0,0}
         };
 
@@ -1016,10 +1029,151 @@ int main_filter(int argc, char** argv){
     vector<int> read_lens;
     read_lens.reserve(2000);
 
+    vector<hash_t*> ref_hashes(ref_keys.size());
+    vector<int> ref_hash_lens(ref_keys.size());
+
+    vector<hash_t*> ref_mins(ref_keys.size());
+    int* ref_min_lens = new int [ref_keys.size()];
+    int* ref_min_starts = new int [ref_keys.size()];
+
+
+
+    HASHTCounter read_hash_counter(10000000);
+    HASHTCounter ref_hash_counter(10000000);
+
+
+    if (!ref_files.empty()){
+        hash_sequences(ref_keys, ref_seqs, ref_lens, ref_hashes, ref_hash_lens, kmer, read_hash_counter, ref_hash_counter, false, (max_samples < 10000));
+    }
+
    
 
     // Hash our refs
-    //
+        //Time to calculate mins for references!
+    int nthreads = 0;
+    int tid = 0;
+#pragma omp parallel private(tid, nthreads)
+    {
+#pragma omp for
+        for (int i = 0; i < ref_keys.size(); i++){
+            ref_min_starts[i] = 0;
+            ref_min_lens[i] = 0;
+            ref_mins[i] = new hash_t[ sketch_size ];
+            std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_lens[i]);
+            if (max_samples < 10000){
+                for (int j = 0; j < ref_hash_lens[i], ref_min_lens[i] < sketch_size; ++j){
+                    //if (ref_sketch_lens[i] >= sketch_size){
+                    //    break;
+                    //}
+                    hash_t curr = *(ref_hashes[i] + j);
+                    //cerr << ref_hash_counter.get(curr) << endl;
+                    if (curr != 0 && ref_hash_counter.get(curr) <= max_samples){
+                        ref_mins[i][ref_min_lens[i]] = curr;
+                        //ref_mins[i][ref_min_lens[i]] = ref_hashes[i][j];
+                        ++ref_min_lens[i];
+                        if (ref_min_lens[i] == sketch_size){
+                            break;
+                        }
+                    }
+                    else{
+                        continue;
+                    }
+                }
+
+            }
+            else{
+                while (ref_hashes[i][ref_min_starts[i]] == 0 && ref_min_starts[i] < ref_hash_lens[i]){
+                    ++ref_min_starts[i];
+                }
+                for (int j = ref_min_starts[i]; j < ref_hash_lens[i], ref_min_lens[i] < sketch_size; ++j){
+                    *(ref_mins[i] +ref_min_lens[i]) = *(ref_hashes[i] + j);
+                    ++ref_min_lens[i];
+                }
+
+            }
+            ref_min_starts[i] = 0;
+
+            delete [] ref_hashes[i];
+
+        }
+    }
+
+        FILE *instream = NULL;
+        instream = stdin;
+
+        gzFile fp = gzdopen(fileno(instream), "r");
+        kseq_t *seq = kseq_init(fp);
+        stringstream outre;
+        while (kseq_read(seq) >= 0){
+            to_upper(seq->seq.s, seq->seq.l);
+
+            string name = string(seq->name.s);
+            int len = seq->seq.l;
+
+            // hash me
+            tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
+            stringstream outre;
+
+            hash_t* hashes = std::get<0>(hashes_and_num);
+            int hashlen = std::get<1>(hashes_and_num);
+
+            std::sort(hashes, hashes + hashlen);
+            // and then just sketch me
+            // TODO need to handle some read_depth
+            int sketch_start = 0;
+            int sketch_len = 0;
+            hash_t* mins = new hash_t[sketch_size];
+            if (min_kmer_occ > 0){
+                for (int i = 0; i < hashlen; ++i){
+                    hash_t curr = *(hashes + i);
+                    if (read_hash_counter.get(curr) >= min_kmer_occ && curr != 0){
+                        mins[sketch_len] = curr;
+                        ++sketch_len;
+                    }
+                    if (sketch_len == sketch_size){
+                        break;
+                    }
+                }
+            }
+            else{
+                while (hashes[sketch_start] == 0 && sketch_start < hashlen){
+                    ++sketch_start;
+                }
+                for (int i = sketch_start; i < hashlen; ++i){
+                    mins[sketch_len++] = *(hashes + i);
+                    if (sketch_len == sketch_size){
+                        break;
+                    }
+                }
+            }
+            sketch_start = 0;
+            // so I can get my
+            // classification
+            tuple<string, int, int, bool> result;
+            result = classify_and_count_diff_filter(ref_keys, ref_mins, mins, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size, min_diff);
+
+            bool depth_filter = sketch_len <= 0; 
+            bool match_filter = std::get<1>(result) < min_matches;
+
+            //outre  << "Sample: " << name << "\t" << "Result: " << 
+            //    std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
+            //    (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
+            outre << seq << endl;
+#pragma omp critical
+            cout << outre.str();
+            outre.str("");
+
+            delete [] hashes;
+            delete [] mins;
+
+            // classification
+        }
+        kseq_destroy(seq);
+        gzclose(fp);
+
+
+
+
     // For each read:
     //  hash that read
     //  compare that read
@@ -2283,6 +2437,9 @@ int main_classify(int argc, char** argv){
         }
         else if (cmd == "stream"){
             return main_stream(argc, argv);
+        }
+        else if (cmd == "filter"){
+            return main_filter(argc, argv);
         }
         else{
             print_help(argv);
