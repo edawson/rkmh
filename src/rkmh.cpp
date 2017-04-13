@@ -735,6 +735,7 @@ int main_stream(int argc, char** argv){
     int tid = 0;
 #pragma omp parallel private(tid, nthreads)
     {
+        tid = omp_get_thread_num();
 #pragma omp for
         for (int i = 0; i < ref_keys.size(); i++){
             ref_min_starts[i] = 0;
@@ -955,7 +956,7 @@ int main_stream(int argc, char** argv){
  * of reference MinHash sketches.
  * */
 int main_filter(int argc, char** argv){
-        vector<char*> ref_files;
+    vector<char*> ref_files;
     vector<char*> read_files;
     vector<char*> pre_read_files;
     vector<char*> pre_ref_files;
@@ -1160,10 +1161,10 @@ int main_filter(int argc, char** argv){
     }
 
     //Time to calculate mins for references!
-    int nthreads = 0;
-    int tid = 0;
-#pragma omp parallel private(tid, nthreads)
+    int tid;
+#pragma omp parallel private(tid)
     {
+        tid = omp_get_thread_num();
 #pragma omp for
         for (int i = 0; i < ref_keys.size(); i++){
             ref_min_starts[i] = 0;
@@ -1259,11 +1260,12 @@ int main_filter(int argc, char** argv){
                         << read_seqs[i] << endl
                         << "+" << endl
                         << read_quals[i] << endl;
+
+                        results[tid].push_back(outre.str());
             }
             //#pragma omp critical
             //cout << outre.str();
             tid = omp_get_thread_num();
-            results[tid].push_back(outre.str());
             outre.str("");
             delete [] read_mins[i];
 
