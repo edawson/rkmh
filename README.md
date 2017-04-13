@@ -1,4 +1,4 @@
-RKMH: Read classification by Kmers / MinHash
+rkmh
 --------------------------------------------
 Eric T Dawson  
 June 2016
