@@ -160,6 +160,8 @@ void help_hash(char** argv){
 void help_stream(char** argv){
     cerr << "Usage: " << argv[0] << " stream [options]" << endl
         << "Options:" << endl
+        << "--input-stream/-i   classify reads coming from STDIN" << endl
+        << "--output-reads/-z   output reads that pass the filters set, rather than classifications." << endl 
         << "--reference/-r   <REF>" << endl
         << "--fasta/-f   <FASTAFILE>" << endl
         << "--kmer/-k    <KMERSIZE>" << endl
@@ -176,6 +178,28 @@ void help_stream(char** argv){
         << "--pre-reference / -R a file containing pre-hashed reference genomes in JSON format." << endl
         << endl;
 
+}
+
+void help_filter(char** argv){
+    cerr << "Usage: " << argv[0] << " filter [options]" << endl
+        << "Options: " << endl
+   << "--input-stream/-i   classify reads coming from STDIN" << endl
+        << "--output-reads/-z   output reads that pass the filters set, rather than classifications." << endl 
+        << "--reference/-r   <REF>" << endl
+        << "--fasta/-f   <FASTAFILE>" << endl
+        << "--kmer/-k    <KMERSIZE>" << endl
+        << "--sketch-size/-s <SKETCHSIZE>" << endl
+        << "--ref-sketch / -S <REFSKTCHSZ>" << endl
+        << "--threads/-t <THREADS>" << endl
+        << "--min-kmer-occurence/-M <MINOCCURENCE>" << endl
+        << "--min-matches/-N <MINMATCHES>" << endl
+        << "--min-diff/-D    <MINDIFFERENCE>" << endl
+        << "--min-informative/-I <MAXSAMPLES> only use kmers present in fewer than MAXSAMPLES" << endl
+        << "--kmer-depth-map / -p <mapfile> the kmer depth map to use for min_kmer_occurence" << endl
+        << "--ref-sample-map / -q <mapfile> the sample depth map for reference sample filtering." << endl
+        << "--pre-fasta / -F  a file containing sketches in JSON format for reads." << endl
+        << "--pre-reference / -R a file containing pre-hashed reference genomes in JSON format." << endl
+        << endl;
 }
 
 void parse_fastas(vector<char*>& files,
@@ -234,6 +258,34 @@ void parse_fastas(vector<char*>& files,
     kseq_destroy(seq);
 }
 
+void parse_fastas(vector<char*>& files,
+        vector<string>& seq_keys,
+        vector<char*>& seq_seqs,
+        vector<int>& seq_lens,
+        vector<string> seq_quals){
+
+    kseq_t *seq;
+    for (int i = 0; i < files.size(); i++){
+        char* f = files[i];
+        gzFile fp;
+        int l;
+        fp = gzopen(f, "r");
+        seq = kseq_init(fp);
+        // Read in reads, cluster, spit it back out
+        while ((l = kseq_read(seq)) >= 0) {
+            to_upper(seq->seq.s, seq->seq.l);
+
+            char * x = new char[seq->seq.l];
+            memcpy(x, seq->seq.s, seq->seq.l);
+            seq_keys.push_back(seq->name.s);
+            seq_seqs.push_back(x);
+            seq_lens.push_back(seq->seq.l);
+            seq_quals.emplace_back(seq->qual.s);
+        } 
+        gzclose(fp);
+    }   
+    kseq_destroy(seq);
+}
 void hash_sequences(vector<string>& keys,
         unordered_map<string, char*>& name_to_seq,
         unordered_map<string, int>& name_to_length,
@@ -529,7 +581,7 @@ int main_stream(int argc, char** argv){
             {"read-kmer-map-file", required_argument, 0, 'p'},
             {"ref-kmer-map-file", required_argument, 0, 'q'},
             {"in-stream", no_argument, 0, 'i'},
-            {"read-filter", no_argument, 0, 'z'},
+            {"output-reads", no_argument, 0, 'z'},
             {0,0,0,0}
         };
 
@@ -864,12 +916,12 @@ int main_stream(int argc, char** argv){
                         << seq->seq.s << endl
                         << "+" << endl
                         << seq->qual.s << endl;
-                    }
+                }
             }
             else{
-            outre  << "Sample: " << name << "\t" << "Result: " << 
-                std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
-                (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
+                outre  << "Sample: " << name << "\t" << "Result: " << 
+                    std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
+                    (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
             }
 #pragma omp critical
             cout << outre.str();
@@ -903,27 +955,42 @@ int main_stream(int argc, char** argv){
  * of reference MinHash sketches.
  * */
 int main_filter(int argc, char** argv){
-    
-    vector<char*> ref_files;
+        vector<char*> ref_files;
     vector<char*> read_files;
+    vector<char*> pre_read_files;
+    vector<char*> pre_ref_files;
 
     vector<int> kmer;
 
     int sketch_size = 1000;
     int threads = 1;
-    int min_kmer_occ = 1;
+    int min_kmer_occ = -1;
     int min_matches = -1;
     int min_diff = 0;
-    int max_samples = 1000000;
-    int window_len = 100;
+    int max_samples = 100000;
 
-    bool show_depth = false;
+    string read_kmer_map_file = "";
+    string ref_kmer_map_file = "";
+
+    bool doReadDepth = false;
+    bool doReferenceDepth = false;
+
+    bool useHASHTs = false;
+    int ref_sketch_size = 0;
+
+    bool streamify_me_capn = false;
+    bool output_reads = false;
+
+    // TODO still need:
+    // prehashed depth map for reads/ref
+    // prehashed reads / refs
+    //
 
     int c;
     int optind = 2;
 
     if (argc <= 2){
-        help_call(argv);
+        help_filter(argv);
         exit(1);
     }
 
@@ -934,22 +1001,40 @@ int main_filter(int argc, char** argv){
             {"kmer", no_argument, 0, 'k'},
             {"fasta", required_argument, 0, 'f'},
             {"reference", required_argument, 0, 'r'},
-            {"sketch", required_argument, 0, 's'},
+            {"sketch-size", required_argument, 0, 's'},
+            {"ref-sketch", required_argument, 0, 'S'},
             {"threads", required_argument, 0, 't'},
             {"min-kmer-occurence", required_argument, 0, 'M'},
             {"min-matches", required_argument, 0, 'N'},
-            {"show-depth", required_argument, 0, 'd'},
+            {"min-diff", required_argument, 0, 'D'},
             {"max-samples", required_argument, 0, 'I'},
+            {"pre-reads", required_argument, 0, 'F'},
+            {"pre-references", required_argument, 0, 'R'},
+            {"read-kmer-map-file", required_argument, 0, 'p'},
+            {"ref-kmer-map-file", required_argument, 0, 'q'},
+            {"in-stream", no_argument, 0, 'i'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "hdk:f:r:s:t:M:N:I:w:", long_options, &option_index);
+        c = getopt_long(argc, argv, "hdk:f:r:s:S:t:M:N:I:R:F:p:q:iD:", long_options, &option_index);
         if (c == -1){
             break;
         }
 
         switch (c){
+            case 'F':
+                pre_read_files.push_back(optarg);
+                break;
+            case 'R':
+                pre_ref_files.push_back(optarg);
+                break;
+            case 'p':
+                read_kmer_map_file = optarg;
+                break;
+            case 'q':
+                ref_kmer_map_file = optarg;
+                break;
             case 't':
                 threads = atoi(optarg);
                 break;
@@ -962,6 +1047,12 @@ int main_filter(int argc, char** argv){
             case 'k':
                 kmer.push_back(atoi(optarg));
                 break;
+            case 'N':
+                min_matches = atoi(optarg);
+                break;
+            case 'D':
+                min_diff = atoi(optarg);
+                break;
             case '?':
             case 'h':
                 print_help(argv);
@@ -970,17 +1061,20 @@ int main_filter(int argc, char** argv){
             case 's':
                 sketch_size = atoi(optarg);
                 break;
+            case 'S':
+                useHASHTs = true;
+                ref_sketch_size = 3 * atoi(optarg);
+                break;
             case 'M':
                 min_kmer_occ = atoi(optarg);
+                doReadDepth = true;
                 break;
             case 'I':
                 max_samples = atoi(optarg);
+                doReferenceDepth = true;
                 break;
-            case 'w':
-                window_len = atoi(optarg);
-                break;
-            case 'd':
-                show_depth = true;
+            case 'i':
+                streamify_me_capn = true;
                 break;
             default:
                 print_help(argv);
@@ -992,64 +1086,80 @@ int main_filter(int argc, char** argv){
     if (sketch_size == -1){
         cerr << "Sketch size unset." << endl
             << "Will use the default sketch size of s = 10000" << endl;
-        sketch_size = 10000;
+        sketch_size = 1000;
     }
 
     if (kmer.size() == 0){
         cerr << "No kmer size(s) provided. Will use a default kmer size of 16." << endl;
         kmer.push_back(16);
     }
-    else if (kmer.size() > 1){
-        cerr << "Only a single kmer size may be used for calling." << endl
-            << "Sizes provided: ";
-        for (auto k : kmer){
-            cerr << k << " ";
-        }
-        cerr << endl;
-        cerr << "Please choose a single kmer size." << endl;
-        exit(1);
-    }
+
 
     omp_set_num_threads(threads);
+    // Read in depth map for reads and refs if provided
+    if (!read_kmer_map_file.empty()){
 
-    //TODO switch to c arrays from vectors?
-    // we know the size of these and we carry the lengths around
+    }
+    if (!ref_kmer_map_file.empty()){
+
+    }
+    //read in prehashed sequences
+    if (!pre_read_files.empty()){
+
+    }
+    if (!pre_ref_files.empty()){
+
+    }
 
     vector<string> ref_keys;
-    ref_keys.reserve(500);
     vector<char*> ref_seqs;
-    ref_seqs.reserve(500);
     vector<int> ref_lens;
-    ref_lens.reserve(500);
 
     vector<string> read_keys;
-    read_keys.reserve(2000);
     vector<char*> read_seqs;
-    read_seqs.reserve(2000);
+    vector<string> read_quals;
     vector<int> read_lens;
-    read_lens.reserve(2000);
+
+
+    //read in new refs/reads, hash them and keep their sketches.
+
+    if (!ref_files.empty()){
+        parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
+    }
+    if (!read_files.empty()){
+        parse_fastas(read_files, read_keys, read_seqs, read_lens, read_quals);
+    }
 
     vector<hash_t*> ref_hashes(ref_keys.size());
     vector<int> ref_hash_lens(ref_keys.size());
+
+    vector<hash_t*> read_hashes(read_keys.size());
+    vector<int> read_hash_lens(read_keys.size());
 
     vector<hash_t*> ref_mins(ref_keys.size());
     int* ref_min_lens = new int [ref_keys.size()];
     int* ref_min_starts = new int [ref_keys.size()];
 
+    vector<hash_t*> read_mins(read_keys.size());
+    int* read_min_starts = new int [ read_keys.size() ];
+    int* read_min_lens = new int [read_keys.size() ];
 
 
     HASHTCounter read_hash_counter(10000000);
     HASHTCounter ref_hash_counter(10000000);
 
+    vector<vector<string> > results(threads);
 
     if (!ref_files.empty()){
-        hash_sequences(ref_keys, ref_seqs, ref_lens, ref_hashes, ref_hash_lens, kmer, read_hash_counter, ref_hash_counter, false, (max_samples < 10000));
+        hash_sequences(ref_keys, ref_seqs, ref_lens, ref_hashes, ref_hash_lens, kmer, read_hash_counter, ref_hash_counter, false, doReferenceDepth);
     }
 
-   
 
-    // Hash our refs
-        //Time to calculate mins for references!
+    if (!read_files.empty()){
+        hash_sequences(read_keys, read_seqs, read_lens, read_hashes, read_hash_lens, kmer, read_hash_counter, ref_hash_counter, doReadDepth, false);
+    }
+
+    //Time to calculate mins for references!
     int nthreads = 0;
     int tid = 0;
 #pragma omp parallel private(tid, nthreads)
@@ -1060,7 +1170,7 @@ int main_filter(int argc, char** argv){
             ref_min_lens[i] = 0;
             ref_mins[i] = new hash_t[ sketch_size ];
             std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_lens[i]);
-            if (max_samples < 10000){
+            if (max_samples < 100000){
                 for (int j = 0; j < ref_hash_lens[i], ref_min_lens[i] < sketch_size; ++j){
                     //if (ref_sketch_lens[i] >= sketch_size){
                     //    break;
@@ -1096,8 +1206,84 @@ int main_filter(int argc, char** argv){
             delete [] ref_hashes[i];
 
         }
+
+        // Classify existing reads
+        // conveniently, read_keys.size() will be zero if there are no reads.
+#pragma omp for
+        for (int i = 0; i < read_keys.size(); i++){
+            stringstream outre;
+            read_mins[i] = new hash_t[ sketch_size ];
+            read_min_lens[i] = 0;
+            read_min_starts[i] = 0;
+            std::sort(read_hashes[i], read_hashes[i] + read_hash_lens[i]);
+            if (doReadDepth){
+                for (int j = 0; j < read_hash_lens[i]; ++j){
+
+                    if (read_hashes[i][j] != 0 && read_hash_counter.get(read_hashes[i][j]) >= min_kmer_occ){
+                        read_mins[i][read_min_lens[i]] = *(read_hashes[i] + j);
+
+                        ++(read_min_lens[i]);
+                        if (read_min_lens[i] == sketch_size){
+                            break;
+                        }
+                    }
+                    else{
+                        continue;
+                    }
+                }
+            }
+            else{
+                while (read_hashes[i][ read_min_starts[i] ] == 0 && read_min_starts[i] < read_hash_lens[i]){
+                    ++read_min_starts[i];
+                }
+                for (int j = read_min_starts[i]; j < read_hash_lens[i]; ++j){
+                    read_mins[i][read_min_lens[i]] = *(read_hashes[i] + j);
+                    ++(read_min_lens[i]);
+                    if (read_min_lens[i] == sketch_size){
+                        break;
+                    }
+                }
+            }
+            read_min_starts[i] = 0;
+            delete [] read_hashes[i];
+
+            tuple<string, int, int, bool> result;
+            result = classify_and_count_diff_filter(ref_keys, ref_mins, read_mins[i], ref_min_starts, read_min_starts[i], ref_min_lens, read_min_lens[i], sketch_size, min_diff);
+
+
+            bool depth_filter = read_min_lens[i] <= 0; 
+            bool match_filter = std::get<1>(result) < min_matches;
+
+            if (!depth_filter && !match_filter && std::get<3>(result)){
+                    outre << ">" << read_keys[i] << endl
+                        << read_seqs[i] << endl
+                        << "+" << endl
+                        << read_quals[i] << endl;
+            }
+            //#pragma omp critical
+            //cout << outre.str();
+            tid = omp_get_thread_num();
+            results[tid].push_back(outre.str());
+            outre.str("");
+            delete [] read_mins[i];
+
+
+        }
+    }
+    for (int i = 0; i < results.size(); ++i){
+        for (int j = 0; j < results[i].size(); ++j){
+            cout << results[i][j];
+        }
     }
 
+    // Take in a quartet of lines from STDIN (FASTQ format??)
+    // or perhaps just individual read sequences and names (or give them names dynamically
+    // hash them, possibly with kmer depth filtering,
+    // create a sketch, then classify and report the classification.
+    //
+    // Thanks heavens for https://biowize.wordpress.com/2013/03/05/using-kseq-h-with-stdin/
+
+    if (streamify_me_capn){
         FILE *instream = NULL;
         instream = stdin;
 
@@ -1155,10 +1341,12 @@ int main_filter(int argc, char** argv){
             bool depth_filter = sketch_len <= 0; 
             bool match_filter = std::get<1>(result) < min_matches;
 
-            //outre  << "Sample: " << name << "\t" << "Result: " << 
-            //    std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
-            //    (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
-            outre << seq << endl;
+                if (!depth_filter && !match_filter && std::get<3>(result)){
+                    outre << ">" << seq->name.s << endl
+                        << seq->seq.s << endl
+                        << "+" << endl
+                        << seq->qual.s << endl;
+                }
 #pragma omp critical
             cout << outre.str();
             outre.str("");
@@ -1171,15 +1359,14 @@ int main_filter(int argc, char** argv){
         kseq_destroy(seq);
         gzclose(fp);
 
+    }
 
 
+    delete [] ref_min_lens;
+    delete [] read_min_lens;
+    delete [] read_min_starts;
+    delete [] ref_min_starts;
 
-    // For each read:
-    //  hash that read
-    //  compare that read
-    //  if that read passes, spit that read to STDOUT
-    //  write some stats to CERR
-    //  otherwis toss that READ outta here and move on
     return 0;
 }
 
@@ -1993,10 +2180,10 @@ int main_hash(int argc, char** argv){
             if (doReadDepth){
                 for (int j = 0; j < read_lens[i]; ++j){
                     if (read_hashes[i][j] != 0 && readhtc.get( read_hashes[i][j] ) > min_kmer_occ){
-                            read_mins.push_back(read_hashes[i][j]);
-                            if (read_hashes.size() >= sketch_size){
-                                break;
-                            }
+                        read_mins.push_back(read_hashes[i][j]);
+                        if (read_hashes.size() >= sketch_size){
+                            break;
+                        }
                     }
                 }
             }
@@ -2005,74 +2192,74 @@ int main_hash(int argc, char** argv){
             }
 
             json jj = dump_hash_json(read_keys[i],
-                read_lens[i],
-                read_mins,
-                kmer,
-                sketch_size
-                );
+                    read_lens[i],
+                    read_mins,
+                    kmer,
+                    sketch_size
+                    );
 #pragma omp critical
-        cout << jj.dump(4) << endl;
+            cout << jj.dump(4) << endl;
+
+        }
+
+    }
+    // makes an outbase.rdepth file
+    if (doReadDepth){
+        if (!outname.empty()){
+            vector<string> splits = split(outname, '.');
+            vector<string> o_base_splits(splits.begin(), splits.end() - 1);
+            o_base_splits.push_back("rkmh.rdepth");
+            outname = join(o_base_splits, ".");
+        }
+        else{
+            outname = "out.rkmh.rdepth";
+        }
+        ofstream ofi;
+        ofi.open(outname);
+
+        /**
+          for (int i = 0; i < readhtc.size(); i++){
+          ofi << readhtc[i] << "\n";
+          }
+         **/
+        ofi << readhtc.to_string() << endl;
+        ofi.close();
+
+    }
+    // makes an outbase.rsamp
+    if (doReferenceDepth){
+        if (!outname.empty()){
+            vector<string> splits = split(outname, '.');
+            vector<string> o_base_splits(splits.begin(), splits.end() - 1);
+            o_base_splits.push_back("rkmh.rsamp");
+            outname = join(o_base_splits, ".");
+        }
+        else{
+            outname = "out.rkmh.rsamp";
+        }
+        ofstream ofi;
+        ofi.open(outname);
+
+        /**
+          for (int i = 0; i < refhtc.size(); i++){
+          ofi << refhtc[i] << "\n";
+          }
+
+         **/
+
+        ofi << refhtc.to_string() << endl;
+        ofi.close();
+
+
 
     }
 
-}
-// makes an outbase.rdepth file
-if (doReadDepth){
-    if (!outname.empty()){
-        vector<string> splits = split(outname, '.');
-        vector<string> o_base_splits(splits.begin(), splits.end() - 1);
-        o_base_splits.push_back("rkmh.rdepth");
-        outname = join(o_base_splits, ".");
-    }
-    else{
-        outname = "out.rkmh.rdepth";
-    }
-    ofstream ofi;
-    ofi.open(outname);
-
-    /**
-      for (int i = 0; i < readhtc.size(); i++){
-      ofi << readhtc[i] << "\n";
-      }
-     **/
-    ofi << readhtc.to_string() << endl;
-    ofi.close();
-
-}
-// makes an outbase.rsamp
-if (doReferenceDepth){
-    if (!outname.empty()){
-        vector<string> splits = split(outname, '.');
-        vector<string> o_base_splits(splits.begin(), splits.end() - 1);
-        o_base_splits.push_back("rkmh.rsamp");
-        outname = join(o_base_splits, ".");
-    }
-    else{
-        outname = "out.rkmh.rsamp";
-    }
-    ofstream ofi;
-    ofi.open(outname);
-
-    /**
-      for (int i = 0; i < refhtc.size(); i++){
-      ofi << refhtc[i] << "\n";
-      }
-
-     **/
-
-    ofi << refhtc.to_string() << endl;
-    ofi.close();
-
-
-
-}
 
 
 
 
 
-
-return 0;
+    return 0;
 }
 
 
