@@ -262,7 +262,7 @@ void parse_fastas(vector<char*>& files,
         vector<string>& seq_keys,
         vector<char*>& seq_seqs,
         vector<int>& seq_lens,
-        vector<string> seq_quals){
+        vector<string>& seq_quals){
 
     kseq_t *seq;
     for (int i = 0; i < files.size(); i++){
@@ -1196,10 +1196,9 @@ int main_filter(int argc, char** argv){
     }
 
     //Time to calculate mins for references!
-    int tid;
-#pragma omp parallel private(tid)
+#pragma omp parallel
     {
-        tid = omp_get_thread_num();
+        //int tid = omp_get_thread_num();
 #pragma omp for
         for (int i = 0; i < ref_keys.size(); i++){
             ref_min_starts[i] = 0;
@@ -1290,28 +1289,32 @@ int main_filter(int argc, char** argv){
             bool depth_filter = read_min_lens[i] <= 0; 
             bool match_filter = std::get<1>(result) < min_matches;
 
+            //cerr << read_keys[i] << " " << read_seqs[i] << endl
+            //    << read_quals[i] << endl;
+
             if (!depth_filter && !match_filter && std::get<3>(result)){
                     outre << ">" << read_keys[i] << endl
                         << read_seqs[i] << endl
                         << "+" << endl
                         << read_quals[i] << endl;
 
-                        results[tid].push_back(outre.str());
+                        //results[tid].push_back(outre.str());
             }
-            //#pragma omp critical
-            //cout << outre.str();
-            tid = omp_get_thread_num();
-            outre.str("");
+            #pragma omp critical
+            {
+                cout << outre.str();
+                outre.str("");
+            }
             delete [] read_mins[i];
 
 
         }
     }
-    for (int i = 0; i < results.size(); ++i){
+    /**for (int i = 0; i < results.size(); ++i){
         for (int j = 0; j < results[i].size(); ++j){
             cout << results[i][j];
         }
-    }
+    }**/
 
     // Take in a quartet of lines from STDIN (FASTQ format??)
     // or perhaps just individual read sequences and names (or give them names dynamically
@@ -1385,9 +1388,10 @@ int main_filter(int argc, char** argv){
                         << seq->qual.s << endl;
                 }
 #pragma omp critical
+                {
             cout << outre.str();
             outre.str("");
-
+                }
             delete [] hashes;
             delete [] mins;
 
@@ -2764,6 +2768,9 @@ int main_filter(int argc, char** argv){
             }
             else if (cmd == "stream"){
                 return main_stream(argc, argv);
+            }
+            else if (cmd == "filter"){
+                return main_filter(argc, argv);
             }
             else{
                 print_help(argv);
