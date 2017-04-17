@@ -116,6 +116,7 @@ void print_help(char** argv){
         << "    call: determine the SNPs and 1-2bp INDELs that differ between a set of reads and their closest reference." << endl
         << "    hash: compute the MinHash sketches of a set of reads and/or references (for interop with Mash/sourmash)." << endl
         << "    stream: classify reads or sequences from STDIN. Low memory, real time, but possibly lower precision." << endl
+        << "    filter: spit out reads that meet thresholds for match to ref, uniqueness, etc." << endl
         << endl;
 }
 
