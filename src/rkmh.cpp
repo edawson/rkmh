@@ -2278,7 +2278,7 @@ int main_filter(int argc, char** argv){
             for (int i = 0; i < ref_keys.size(); i++){
                 int sketch_len = 0;
                 vector<hash_t> ref_mins(sketch_size);
-
+                std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
                 if (max_samples < 10000){
                     for (int j = 0; j < ref_hash_nums[i], sketch_len < sketch_size; ++j){
                         //if (ref_sketch_lens[i] >= sketch_size){
