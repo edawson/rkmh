@@ -468,13 +468,13 @@ json dump_hash_json(string key, int seqLen,
 
 json dump_hashes(vector<string> keys,
         vector<int> seqlens,
-        vector<vector<hash_t*>> hashes,
+        vector<vector<hash_t>> hashes,
         vector<int> kmer,
         int sketch_size){
 
     json j;
     for (int i = 0; i < keys.size(); i++){
-        j[keys[i]] = {
+        j.push_back({
             {"name", keys[i]},
             {"alphabet", "ATGC"},
             {"canonical", "false"},
@@ -485,7 +485,7 @@ json dump_hashes(vector<string> keys,
             {"length", sketch_size},
             {"kmer", kmer},
             {"preserveCase", "false"}
-        };
+        });
     }
 
     return j;
@@ -2201,6 +2201,11 @@ int main_filter(int argc, char** argv){
         }
 
 
+        vector<hash_t*> read_mins(read_keys.size());
+        int* read_min_starts = new int [ read_keys.size() ];
+        int* read_min_lens = new int [read_keys.size() ];
+        
+        vector<vector<hash_t> > read_vecs(read_keys.size());
 
         int ref_htc_size = 0;
         int read_htc_size = 0;
@@ -2273,7 +2278,7 @@ int main_filter(int argc, char** argv){
             for (int i = 0; i < ref_keys.size(); i++){
                 int sketch_len = 0;
                 vector<hash_t> ref_mins(sketch_size);
-
+                std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
                 if (max_samples < 10000){
                     for (int j = 0; j < ref_hash_nums[i], sketch_len < sketch_size; ++j){
                         //if (ref_sketch_lens[i] >= sketch_size){
@@ -2342,43 +2347,56 @@ int main_filter(int argc, char** argv){
 
 
 #pragma omp for
-            for (int i = 0; i < read_keys.size(); i++){
-                int sketch_len = 0;
-                vector<hash_t> read_mins(sketch_size);
+        for (int i = 0; i < read_keys.size(); i++){
+            stringstream outre;
+            read_mins[i] = new hash_t[ sketch_size ];
+            read_min_lens[i] = 0;
+            read_min_starts[i] = 0;
+            std::sort(read_hashes[i], read_hashes[i] + read_lens[i]);
+            if (doReadDepth){
+                for (int j = 0; j < read_lens[i]; ++j){
 
-                if (max_samples < 10000){
-                    for (int j = 0; j < read_hash_nums[i], sketch_len < sketch_size; ++j){
-                        //if (ref_sketch_lens[i] >= sketch_size){
-                        //    break;
-                        //}
-                        hash_t curr = *(read_hashes[i] + j);
-                        //cerr << ref_hash_counter.get(curr) << endl;
-                        if (curr != 0 && readhtc.get(curr) <= max_samples){
-                            read_mins[sketch_len] = curr;
-                            //ref_mins[i][ref_min_lens[i]] = ref_hashes[i][j];
-                            ++sketch_len;
-                            if (sketch_len == sketch_size){
-                                break;
-                            }
-                        }
-                        else{
-                            continue;
+                    if (read_hashes[i][j] != 0 && readhtc.get(read_hashes[i][j]) >= min_kmer_occ){
+                        read_mins[i][read_min_lens[i]] = *(read_hashes[i] + j);
+
+                        ++(read_min_lens[i]);
+                        if (read_min_lens[i] == sketch_size){
+                            break;
                         }
                     }
-
-                }
-                else{
-                    int start_offset = 0;
-                    while (read_hashes[i][start_offset] == 0 && start_offset < read_lens[i]){
-                        ++start_offset;
-                    }
-                    for (int j = start_offset; j < read_lens[i], sketch_len < sketch_size; ++j){
-                        read_mins[ sketch_len] = *(read_hashes[i] + j);
-                        ++sketch_len;
+                    else{
+                        continue;
                     }
                 }
             }
+            else{
+                while (read_hashes[i][ read_min_starts[i] ] == 0 && read_min_starts[i] < read_lens[i]){
+                    ++read_min_starts[i];
+                }
+                for (int j = read_min_starts[i]; j < read_lens[i]; ++j){
+                    read_mins[i][read_min_lens[i]] = *(read_hashes[i] + j);
+                    ++(read_min_lens[i]);
+                    if (read_min_lens[i] == sketch_size){
+                        break;
+                    }
+                }
+            }
+            vector<hash_t> read_vec(read_mins[i], read_mins[i] + read_min_lens[i]);
+            read_vecs[i] = read_vec;
+
+ 
         }
+
+            json jj = dump_hashes(read_keys,
+                        read_lens,
+                        read_vecs,
+                        kmer,
+                        sketch_size
+                        );
+#pragma omp critical
+                cout << jj.dump(4) << endl;
+        }
+
         // makes an outbase.rsamp
         if (doReferenceDepth){
             if (!outname.empty()){
@@ -2399,9 +2417,26 @@ int main_filter(int argc, char** argv){
                 ofi << refhtc[i] << "\n";
             }
             ofi.close();
+        }
 
+        if (doReadDepth){
+            if (!outname.empty()){
+                vector<string> splits = split(outname, '.');
+                vector<string> o_base_splits(splits.begin(), splits.end() - 1);
+                o_base_splits.push_back("rkmh.rdepth");
+                outname = join(o_base_splits, ".");
+            }
+            else{
+                outname = "out.rkmh.rdepth";
+            }
+            ofstream ofi;
+            ofi.open(outname);
 
-
+            ofi << readhtc.size() << endl;
+            for (int i = 0; i < readhtc.size(); i++){
+                ofi << readhtc[i] << "\n";
+            }
+            ofi.close();
         }
 
 
