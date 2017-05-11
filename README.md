@@ -27,6 +27,17 @@ The only external dependencies should be zlib and a compiler supporting OpenMP. 
 
 This should build rkmh and its library dependencies (mkmh and murmur3).
 
+### *NEW*: Filter
+Imagine you have a bunch of reads sequenced from a viral infection and you want to select only those that are
+from the virus (i.e. remove host reads).
+
+Now you can:
+
+    rkmh filter -f reads.fq -r viral_refs.fa -t 4 -k 20 -s 2000
+
+You can also pass the `-z` param to stream to accomplish the same thing.
+
+
 
 ### *NEW*: Stream
 rkmh can now stream reads through, using roughly constant memory.

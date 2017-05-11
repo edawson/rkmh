@@ -155,7 +155,8 @@ void help_hash(char** argv){
         << "--kmer/-k <KMER>             kmer size to hash." << endl
         << "--min-kmer-occurrence <M>    Minimum kmer occurrence. Failing kmers are removed from sketch." << endl
         << "--min-informative/-I  <I>    Maximum number of samples a kmer can occur in before it is removed" << endl
-        << "--threads/-t <THREADS>       number of OpenMP threads to utilize." << endl;
+        << "--threads/-t <THREADS>       number of OpenMP threads to utilize." << endl
+        << "--wabbitize /-w              output Vowpal Wabbit compatible vectors" << endl;
 }
 
 void help_stream(char** argv){
@@ -2387,9 +2388,9 @@ int main_filter(int argc, char** argv){
             read_mins[i] = new hash_t[ sketch_size ];
             read_min_lens[i] = 0;
             read_min_starts[i] = 0;
-            std::sort(read_hashes[i], read_hashes[i] + read_lens[i]);
+            std::sort(read_hashes[i], read_hashes[i] + read_hash_nums[i]);
             if (doReadDepth){
-                for (int j = 0; j < read_lens[i]; ++j){
+                for (int j = 0; j < read_hash_nums[i]; ++j){
 
                     if (read_hashes[i][j] != 0 && readhtc.get(read_hashes[i][j]) >= min_kmer_occ){
                         read_mins[i][read_min_lens[i]] = *(read_hashes[i] + j);
@@ -2405,7 +2406,7 @@ int main_filter(int argc, char** argv){
                 }
             }
             else{
-                while (read_hashes[i][ read_min_starts[i] ] == 0 && read_min_starts[i] < read_lens[i]){
+                while (read_hashes[i][ read_min_starts[i] ] == 0 && read_min_starts[i] < read_hash_nums[i]){
                     ++read_min_starts[i];
                 }
                 for (int j = read_min_starts[i]; j < read_lens[i]; ++j){
@@ -2416,19 +2417,23 @@ int main_filter(int argc, char** argv){
                     }
                 }
             }
-                vector<hash_t> read_vec(read_mins[i], read_mins[i] + read_min_lens[i]);
-                //read_vecs[i] = read_vec;
+            vector<hash_t> read_vec(read_mins[i], read_mins[i] + read_min_lens[i]);
+            //read_vecs[i] = read_vec;
 
             if (wabbitize){
                 int sz = read_vec.size();
-                print_wabbit(read_keys[i], read_vec, sz, sketch_size);
+                #pragma omp critical
+                {
+                    print_wabbit(read_keys[i], read_vec, sz, sketch_size);
+                }
             }
             else{
             }
 
  
         }
-        
+        }
+    
         if (!wabbitize){
             json jj = dump_hashes(read_keys,
                         read_lens,
@@ -2440,7 +2445,7 @@ int main_filter(int argc, char** argv){
                 cout << jj.dump(4) << endl;
 
         }
-                }
+
 
         // makes an outbase.rsamp
         if (doReferenceDepth){
@@ -2483,10 +2488,17 @@ int main_filter(int argc, char** argv){
             }
             ofi.close();
         }
+            
+        for (auto i: read_mins){
+            delete [] i;
+        }
+        for (auto i : read_hashes){
+            delete [] i;
+        }
 
 
-
-
+        delete [] read_min_starts;
+        delete [] read_min_lens;
 
 
         return 0;
