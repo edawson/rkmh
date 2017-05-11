@@ -428,6 +428,49 @@ void hash_sequences(vector<string>& keys,
 
 }
 
+string sketch_to_json(string key,
+                    vector<hash_t> mins,
+                    int sketchlen,
+                    vector<int> kmer,
+                    int sketch_size){
+    
+}
+void sketches_to_jsons(vector<string>& keys,
+                        vector<vector<hash_t> >& mins,
+                        vector<int>& sketchlens,
+                        vector<int>& kmer,
+                        int sketch_size){
+    cout << "[" << endl;
+    for (int i = 0; i < keys.size(); ++i){
+        cout << sketch_to_json(keys[i], mins[i], sketchlens[i], kmer, sketch_size);
+    }
+    cout << "]" << endl;
+}
+
+
+void rkmh_binary_output(vector<string> keys,
+                        vector<vector<hash_t> >& mins,
+                        vector<int> sketchlens,
+                        vector<int>& kmer,
+                        int sketch_size){
+
+}
+
+void print_wabbit(string key,
+                  vector<hash_t>& mins,
+                  int& sketch_len,
+                  int& sketch_size,
+                  string label = "XYX",
+                  string nspace = "vir"){
+
+       key = join( split(key, '|'), "_");
+       cout << label << " 1.0 " << " `" << key << " |" << nspace;
+       for (int i = 0; i < sketch_len; ++i){
+            cout << " " << mins[i] << ":1";
+       }
+       cout << endl;
+}
+
 json dump_hash_json(string key, int seqLen,
         vector<hash_t> mins,
         vector<int> kmer, 
@@ -2076,6 +2119,7 @@ int main_filter(int argc, char** argv){
 
         bool doReadDepth = false;
         bool doReferenceDepth = false;
+        bool wabbitize = false;
 
         string outname = "";
 
@@ -2092,6 +2136,7 @@ int main_filter(int argc, char** argv){
             {
                 {"help", no_argument, 0, 'h'},
                 {"kmer", no_argument, 0, 'k'},
+                {"wabbitize", no_argument, 0, 'w'},
                 {"fasta", required_argument, 0, 'f'},
                 {"reference", required_argument, 0, 'r'},
                 {"sketch-size", required_argument, 0, 's'},
@@ -2103,12 +2148,15 @@ int main_filter(int argc, char** argv){
             };
 
             int option_index = 0;
-            c = getopt_long(argc, argv, "hk:f:r:s:t:M:I:o:", long_options, &option_index);
+            c = getopt_long(argc, argv, "hwk:f:r:s:t:M:I:o:", long_options, &option_index);
             if (c == -1){
                 break;
             }
 
             switch (c){
+                case 'w':
+                    wabbitize = true;
+                    break;
                 case 't':
                     threads = atoi(optarg);
                     break;
@@ -2311,42 +2359,29 @@ int main_filter(int argc, char** argv){
                     }
 
                 }
-                json jj = dump_hash_json(ref_keys[i],
+
+                if (wabbitize){
+
+                    print_wabbit(ref_keys[i], ref_mins, sketch_len, sketch_size);
+                }
+                else {
+                    json jj = dump_hash_json(ref_keys[i],
                         ref_lens[i],
                         ref_mins,
                         kmer,
                         sketch_len
                         );
-#pragma omp critical
-                cout << jj.dump(4) << endl;
-                /* #pragma omp critical
-                   {
-                   if (!outname.empty()){
-                   vector<string> splits = split(outname, '.');
-                   vector<string> o_base_splits(splits.begin(), splits.end() - 1);
-                   o_base_splits.push_back("rkmh.refSketch");
-                   outname = join(o_base_splits, ".");
-                   }
-                   else{
-                   outname = "out.rkmh.refSketch";
-                   }
-                   ofstream ofi;
-                   ofi.open(outname);
+                    #pragma omp critical
+                    cout << jj.dump(4) << endl;
 
-                   ofi << dump_hash_json(ref_keys[i], sketch_len,
-                   ref_mins,
-                   kmer,
-                   sketch_size) << endl;
-
-
-                   }*/
+                }
             }
 
 
 
 
 
-#pragma omp for
+        #pragma omp for
         for (int i = 0; i < read_keys.size(); i++){
             stringstream outre;
             read_mins[i] = new hash_t[ sketch_size ];
@@ -2381,21 +2416,31 @@ int main_filter(int argc, char** argv){
                     }
                 }
             }
-            vector<hash_t> read_vec(read_mins[i], read_mins[i] + read_min_lens[i]);
-            read_vecs[i] = read_vec;
+                vector<hash_t> read_vec(read_mins[i], read_mins[i] + read_min_lens[i]);
+                //read_vecs[i] = read_vec;
+
+            if (wabbitize){
+                int sz = read_vec.size();
+                print_wabbit(read_keys[i], read_vec, sz, sketch_size);
+            }
+            else{
+            }
 
  
         }
-
+        
+        if (!wabbitize){
             json jj = dump_hashes(read_keys,
                         read_lens,
                         read_vecs,
                         kmer,
                         sketch_size
                         );
-#pragma omp critical
+                #pragma omp critical
                 cout << jj.dump(4) << endl;
+
         }
+                }
 
         // makes an outbase.rsamp
         if (doReferenceDepth){
