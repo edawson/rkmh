@@ -2,6 +2,7 @@
 #define EQUIV_D
 
 #include <string>
+#include <set>
 #include <vector>
 #include <queue>
 #include <tuple>
@@ -15,6 +16,71 @@
 using namespace std;
 using namespace mkmh;
 
+struct c_comp{
+    bool operator() (const hash_t& lhs, const hash_t& rhs) const {return lhs < rhs;};
+};
+
+
+struct min_heap{
+    set<hash_t> con;
+    int max_sz;
+    void init(int s){
+        max_sz = s;  
+    };
+    bool insert(hash_t val){
+        if (val == 0){
+            
+        }
+        else if (con.size() < 1){
+           con.insert(val);
+        }
+        else if (val < *(con.rbegin())){
+           con.insert(val);
+        }
+    };
+    void resize(){
+        if (con.size() > max_sz){
+            set<hash_t> x;
+            int i = 0;
+            auto itr = con.begin();
+            while (i < max_sz){
+                x.insert(*itr);
+                i++;
+                itr++;
+            }
+            con = x;
+        }
+    };
+};
+
+
+/**
+ * takes a vector<vector<hasht>>, the mins of the reads set AND the sketch size
+ * return a sketch of the lowest 
+ */
+inline tuple<hash_t*, int> merge(vector<vector<hash_t>> mins, int sketchsz){
+    int ret_sz = 0;
+    hash_t* ret = new hash_t [sketchsz];
+    min_heap k;
+    k.init(sketchsz);
+    
+    for (auto x : mins){
+        //std::set<hash_t> y (x.begin(), x.end()); 
+        for (auto y : x){
+            k.insert(y);
+        }
+    }
+    
+    k.resize();
+    for (auto x = k.con.begin(); x != k.con.end(); x++){
+        ret[ret_sz++] = *x;
+    }
+
+
+
+    return make_tuple(ret, ret_sz);
+
+};
 
 inline map<string, vector<string> > make_kmer_to_samples(map<string, vector<string>>& sample_to_kmers){
     map<string, vector<string> > ret;

@@ -2121,6 +2121,7 @@ int main_filter(int argc, char** argv){
         bool doReadDepth = false;
         bool doReferenceDepth = false;
         bool wabbitize = false;
+        bool merge_sketch = false;
 
         string outname = "";
 
@@ -2137,6 +2138,7 @@ int main_filter(int argc, char** argv){
             {
                 {"help", no_argument, 0, 'h'},
                 {"kmer", no_argument, 0, 'k'},
+                {"merge-sample", no_argument, 0, 'm'},
                 {"wabbitize", no_argument, 0, 'w'},
                 {"fasta", required_argument, 0, 'f'},
                 {"reference", required_argument, 0, 'r'},
@@ -2149,12 +2151,15 @@ int main_filter(int argc, char** argv){
             };
 
             int option_index = 0;
-            c = getopt_long(argc, argv, "hwk:f:r:s:t:M:I:o:", long_options, &option_index);
+            c = getopt_long(argc, argv, "hwk:f:r:s:t:mM:I:o:", long_options, &option_index);
             if (c == -1){
                 break;
             }
 
             switch (c){
+                case 'm':
+                    merge_sketch = true;
+                    break;
                 case 'w':
                     wabbitize = true;
                     break;
@@ -2418,9 +2423,9 @@ int main_filter(int argc, char** argv){
                 }
             }
             vector<hash_t> read_vec(read_mins[i], read_mins[i] + read_min_lens[i]);
-            //read_vecs[i] = read_vec;
+            read_vecs[i] = read_vec;
 
-            if (wabbitize){
+            if ((!merge_sketch) && wabbitize){
                 int sz = read_vec.size();
                 #pragma omp critical
                 {
@@ -2444,6 +2449,13 @@ int main_filter(int argc, char** argv){
                 #pragma omp critical
                 cout << jj.dump(4) << endl;
 
+        }
+        else if (wabbitize && merge_sketch){
+            tuple<hash_t*, int> m = merge(read_vecs, sketch_size);
+            hash_t* p = std::get<0>(m);
+            int z = std::get<1>(m);
+            vector<hash_t> fresh_vec(p, p + z);
+            print_wabbit("sample", fresh_vec, z, sketch_size);
         }
 
 
