@@ -2414,7 +2414,7 @@ int main_filter(int argc, char** argv){
                 while (read_hashes[i][ read_min_starts[i] ] == 0 && read_min_starts[i] < read_hash_nums[i]){
                     ++read_min_starts[i];
                 }
-                for (int j = read_min_starts[i]; j < read_lens[i]; ++j){
+                for (int j = read_min_starts[i]; j < read_hash_nums[i]; ++j){
                     read_mins[i][read_min_lens[i]] = *(read_hashes[i] + j);
                     ++(read_min_lens[i]);
                     if (read_min_lens[i] == sketch_size){
