@@ -10,4 +10,4 @@ RUN echo "deb http://archive.ubuntu.com/ubuntu trusty-backports main restricted 
     zlib1g-dev
 
 RUN git clone --recursive https://github.com/edawson/rkmh && \
-    cd rkmh && make && cp rkmh /usr/local/bin
+    cd rkmh && git checkout dev && make && cp rkmh /usr/local/bin
