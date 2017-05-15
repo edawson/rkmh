@@ -465,7 +465,7 @@ void print_wabbit(string key,
                   string nspace = "vir"){
 
        key = join( split(key, '|'), "_");
-       cout << label << " 1.0 " << " `" << key << " |" << nspace;
+       cout << label << " 1.0 " << "`" << key << "|" << nspace;
        for (int i = 0; i < sketch_len; ++i){
             cout << " " << mins[i] << ":1";
        }
