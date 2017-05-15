@@ -15,7 +15,7 @@ if __name__ == "__main__":
         for line in ifi:
             tokens = line.split()
             call = float(tokens[0])
-            if call < 0:
+            if call > 0:
                 print "STATUS:COINF. Sample", tokens[1], "is coinfected. Logit score was", tokens[0]
             elif call == 0:
                 print "STATUS:UNKNOWN. Sample", tokens[1], "was inconclusive. Logit score was 0"
