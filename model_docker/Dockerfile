@@ -13,5 +13,6 @@ RUN echo "deb http://archive.ubuntu.com/ubuntu trusty-backports main restricted 
 RUN cd /app/ && git clone --recursive https://github.com/edawson/rkmh && \
     cd rkmh && git checkout dev && make && cp rkmh /usr/local/bin
 
-COPY *.model /app/models
+RUN mkdir /app/models
+COPY *.model /app/models/
 COPY vw-8.2 /app/
