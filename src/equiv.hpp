@@ -34,7 +34,8 @@ struct min_heap{
         else if (con.size() < 1){
            con.insert(val);
         }
-        else if (val < *(con.rbegin())){
+        //else if (val < *(con.rbegin())){
+        else{
            con.insert(val);
         }
     };
