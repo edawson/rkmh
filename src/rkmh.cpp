@@ -251,7 +251,7 @@ void parse_fastas(vector<char*>& files,
 
             char * x = new char[seq->seq.l];
             memcpy(x, seq->seq.s, seq->seq.l);
-            seq_keys.push_back(seq->name.s);
+            seq_keys.push_back( string(seq->name.s) );
             seq_seqs.push_back(x);
             seq_lens.push_back(seq->seq.l);
         } 
@@ -1338,17 +1338,17 @@ int main_filter(int argc, char** argv){
             //    << read_quals[i] << endl;
 
             if (!depth_filter && !match_filter && std::get<3>(result)){
-                outre << ">" << read_keys[i] << endl
-                    << read_seqs[i] << endl
+                outre << ">" << string(read_keys[i]) << endl
+                    << string(read_seqs[i], read_lens[i]) << endl
                     << "+" << endl
-                    << read_quals[i] << endl;
+                    << string(read_quals[i]) << endl;
 
                 //results[tid].push_back(outre.str());
-            }
-#pragma omp critical
-            {
-                cout << outre.str();
-                outre.str("");
+                #pragma omp critical
+                {
+                    cout << outre.str();
+                    outre.str("");
+                }
             }
             delete [] read_mins[i];
 
