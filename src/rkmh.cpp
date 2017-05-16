@@ -593,6 +593,7 @@ int main_stream(int argc, char** argv){
 
     bool streamify_me_capn = false;
     bool output_reads = false;
+    bool merge_sketch = false;
 
     // TODO still need:
     // prehashed depth map for reads/ref
@@ -627,16 +628,20 @@ int main_stream(int argc, char** argv){
             {"ref-kmer-map-file", required_argument, 0, 'q'},
             {"in-stream", no_argument, 0, 'i'},
             {"output-reads", no_argument, 0, 'z'},
+            {"merge-sketch", no_argument, 0, 'm'},
             {0,0,0,0}
         };
 
         int option_index = 0;
-        c = getopt_long(argc, argv, "zhdk:f:r:s:S:t:M:N:I:R:F:p:q:iD:", long_options, &option_index);
+        c = getopt_long(argc, argv, "zmhdk:f:r:s:S:t:M:N:I:R:F:p:q:iD:", long_options, &option_index);
         if (c == -1){
             break;
         }
 
         switch (c){
+            case 'm':
+                merge_sketch = true;
+                break;
             case 'F':
                 pre_read_files.push_back(optarg);
                 break;
@@ -779,6 +784,8 @@ int main_stream(int argc, char** argv){
     int* read_min_starts = new int [ read_keys.size() ];
     int* read_min_lens = new int [read_keys.size() ];
 
+    vector<vector<hash_t> > mergeable(read_keys.size());
+
     int ref_htc_size = 0;
     int read_htc_size = 0;
 
@@ -895,33 +902,59 @@ int main_stream(int argc, char** argv){
             read_min_starts[i] = 0;
             delete [] read_hashes[i];
 
-            tuple<string, int, int, bool> result;
-            result = classify_and_count_diff_filter(ref_keys, ref_mins, read_mins[i], ref_min_starts, read_min_starts[i], ref_min_lens, read_min_lens[i], sketch_size, min_diff);
+            if (!merge_sketch){
+                tuple<string, int, int, bool> result;
+                result = classify_and_count_diff_filter(ref_keys, ref_mins, read_mins[i], ref_min_starts, read_min_starts[i], ref_min_lens, read_min_lens[i], sketch_size, min_diff);
 
 
-            bool depth_filter = read_min_lens[i] <= 0; 
-            bool match_filter = std::get<1>(result) < min_matches;
+                bool depth_filter = read_min_lens[i] <= 0; 
+                bool match_filter = std::get<1>(result) < min_matches;
 
-            outre  << "Sample: " << read_keys[i] << "\t" << "Result: " << 
-                std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
-                (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
+                outre  << "Sample: " << read_keys[i] << "\t" << "Result: " << 
+                    std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
+                    (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
 
             //#pragma omp critical
             //cout << outre.str();
-            tid = omp_get_thread_num();
-            results[tid].push_back(outre.str());
-            outre.str("");
-            delete [] read_mins[i];
+                tid = omp_get_thread_num();
+                results[tid].push_back(outre.str());
+                outre.str("");
+                delete [] read_mins[i];
+                }
+                else{
+                    vector<hash_t> read_vec(read_mins[i], read_mins[i] + read_min_lens[i]);
+                    mergeable[i] = read_vec;
+                }
 
 
         }
 
-#pragma omp single
-        {
-            for (int i = 0; i < results.size(); ++i){
-                for (int j = 0; j < results[i].size(); ++j){
-                    cout << results[i][j];
+        if (!merge_sketch){
+            #pragma omp single
+            {
+                for (int i = 0; i < results.size(); ++i){
+                    for (int j = 0; j < results[i].size(); ++j){
+                        cout << results[i][j];
+                    }
                 }
+            }
+
+        }
+        else{
+#pragma omp single
+            {
+            tuple<hash_t*, int> merged = merge(mergeable, sketch_size);
+            tuple<string, int, int, bool> result;
+            result = classify_and_count_diff_filter(ref_keys, ref_mins, std::get<0>(merged), ref_min_starts, 0, ref_min_lens, std::get<1>(merged), sketch_size, min_diff);
+
+
+            bool depth_filter = std::get<1>(merged) <= 0; 
+            bool match_filter = std::get<1>(result) < min_matches;
+            stringstream outre;
+            outre  << "Sample: " << "merged" << "\t" << "Result: " << 
+            std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
+            (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
+            cout << outre.str();
             }
         }
 
@@ -2810,27 +2843,6 @@ int main_filter(int argc, char** argv){
                     read_sketch_lens[i] = diff < sketch_size ? diff : sketch_size;
 
                 }
-
-                /**inline tuple<string, int, int> classify_and_count(vector<string> ref_keys, vector<hash_t*> ref_mins, hash_t* read_mins,
-                  vector<int> ref_starts, int read_start,
-                  vector<int> ref_lens, int read_len,
-                  int sketch_size){
-                  */
-
-                /**             
-                  tuple<string, int, int> result;
-                  result = classify_and_count(ref_keys, ref_sketches, read_sketches[i], ref_sketch_starts, read_sketch_starts[i], ref_sketch_lens, read_sketch_lens[i], sketch_size);
-
-
-                  bool depth_filter = read_sketch_lens[i] <= 0; 
-                  bool match_filter = std::get<1>(result) < min_matches;
-
-                  outre  << "Sample: " << read_keys[i] << "\t" << "Result: " << 
-                  std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
-                  (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << endl;
-
-                 **/
-
                 tuple<string, int, int, bool> result;
                 result = classify_and_count_diff_filter(ref_keys, ref_sketches, read_sketches[i], ref_sketch_starts, read_sketch_starts[i], ref_sketch_lens, read_sketch_lens[i], sketch_size, min_diff);
 
@@ -2845,7 +2857,7 @@ int main_filter(int argc, char** argv){
 
 
 
-#pragma omp critical
+                #pragma omp critical
                 cout << outre.str();
 
                 outre.str("");
