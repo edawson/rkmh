@@ -461,15 +461,24 @@ void print_wabbit(string key,
                   vector<hash_t>& mins,
                   int& sketch_len,
                   int& sketch_size,
+                  vector<int> counts,
                   string label = "XYX",
                   string nspace = "vir"){
 
        key = join( split(key, '|'), "_");
        cout << label << " 1.0 " << "`" << key << "|" << nspace;
-       for (int i = 0; i < sketch_len; ++i){
-            cout << " " << mins[i] << ":1";
+       if (!counts.empty()){
+            for (int i = 0; i < sketch_len; ++i){
+                cout << " " << mins[i] << ":" << counts[i];
+        }
        }
-       cout << endl;
+       else{
+             for (int i = 0; i < sketch_len; ++i){
+                cout << " " << mins[i] << ":1";
+        }
+
+        }
+              cout << endl;
 }
 
 json dump_hash_json(string key, int seqLen,
@@ -719,8 +728,8 @@ int main_stream(int argc, char** argv){
 
     omp_set_num_threads(threads);
     // Read in depth map for reads and refs if provided
-    HASHTCounter read_hash_counter(10000000);
-    HASHTCounter ref_hash_counter(10000000);
+    HASHTCounter read_hash_counter(200000000);
+    HASHTCounter ref_hash_counter(200000000);
     if (!read_kmer_map_file.empty()){
         ifstream ifi(read_kmer_map_file);
         string xline;
@@ -794,12 +803,12 @@ int main_stream(int argc, char** argv){
     if (!read_keys.empty() && read_kmer_map_file.empty()){
         read_htc_size = (int)  ((double) (read_keys.size() * read_lens[0]) * 5);
 
-        read_hash_counter.size( read_htc_size );
+        //read_hash_counter.size( read_htc_size );
     }
     if (!ref_keys.empty() && ref_kmer_map_file.empty()){
         ref_htc_size = (int) ((double) (ref_keys.size() * ref_lens[0]) * 5);
 
-        ref_hash_counter.size( ref_htc_size );
+        //ref_hash_counter.size( ref_htc_size );
     }
 
     vector<vector<string> > results(threads);
@@ -1977,7 +1986,8 @@ int main_filter(int argc, char** argv){
 
                                 if ( !show_depth && alt_depth > .9 * avg_d){
                                     int pos = j + alt_pos + 1;
-                                    outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
+                                    //outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tRESCUE_DEPTH: " << alt_depth << "\tORIGINAL_DEPTH: " << depth << "\tSURROUNDING_AVG: " << avg_d<< endl;
+                                    outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tRESCUE_DEPTH: " << alt_depth << endl;
                                     outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt << endl;
                                 }
                                 alt[alt_pos] = orig;
@@ -2013,6 +2023,7 @@ int main_filter(int argc, char** argv){
                                 int alt_depth = read_hash_to_depth[calc_hash(k_alt, kmer[0])];
                                 if (!show_depth && alt_depth > .9 * avg_d){
                                     int pos = j + alt_pos + 1;
+                                    //outre << "CALL: " << ref[alt_pos] << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << "\tORIGINAL_DEPTH: " << depth << "\tSURROUNDING_AVG: " << avg_d << endl;
                                     outre << "CALL: " << ref[alt_pos] << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
                                     outre << "\t" << "old: " << " " << ref << endl << "\t" << "new: " << k_alt << endl;
 
@@ -2032,6 +2043,7 @@ int main_filter(int argc, char** argv){
                                 alt_depth = read_hash_to_depth[calc_hash(k_alt, kmer[0])];
                                 if (!show_depth && alt_depth > .9 * avg_d){
                                     int pos = j + alt_pos + 1;
+                                    //outre << "CALL: " << ref[alt_pos] << "->" << ref[alt_pos] << ref[alt_pos] << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << "\tORIGINAL_DEPTH: " << depth << "\tSURROUNDING_AVG: " << avg_d << endl;
                                     outre << "CALL: " << ref[alt_pos] << "->" << ref[alt_pos] << ref[alt_pos] << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
                                     outre << "\t" << "old: " << ref << endl << "\t" << "new: " << k_alt << endl;
 
@@ -2054,6 +2066,7 @@ int main_filter(int argc, char** argv){
                                     alt_depth = read_hash_to_depth[calc_hash(k_alt, kmer[0])];
                                     if (!show_depth && alt_depth > .9 * avg_d){
                                         int pos = j + alt_pos + 1;
+                                        //outre << "CALL: " << ref[alt_pos] << "->" << ref[alt_pos] << x << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << "\tORIGINAL_DEPTH: " << depth << "\tSURROUNDING_AVG: " << avg_d << endl;
                                         outre << "CALL: " << ref[alt_pos] << "->" << ref[alt_pos] << x << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
                                         outre << "\t" << "old: " << ref << endl << "\t" << "new: " << k_alt << endl;
 
@@ -2400,8 +2413,8 @@ int main_filter(int argc, char** argv){
                 }
 
                 if (wabbitize){
-
-                    print_wabbit(ref_keys[i], ref_mins, sketch_len, sketch_size);
+                    vector<int> counts;
+                    print_wabbit(ref_keys[i], ref_mins, sketch_len, sketch_size, counts);
                 }
                 else {
                     json jj = dump_hash_json(ref_keys[i],
@@ -2462,7 +2475,8 @@ int main_filter(int argc, char** argv){
                 int sz = read_vec.size();
                 #pragma omp critical
                 {
-                    print_wabbit(read_keys[i], read_vec, sz, sketch_size);
+                    vector<int> counts;
+                    print_wabbit(read_keys[i], read_vec, sz, sketch_size, counts);
                 }
             }
             else{
@@ -2484,11 +2498,13 @@ int main_filter(int argc, char** argv){
 
         }
         else if (wabbitize && merge_sketch){
-            tuple<hash_t*, int> m = merge(read_vecs, sketch_size);
-            hash_t* p = std::get<0>(m);
-            int z = std::get<1>(m);
-            vector<hash_t> fresh_vec(p, p + z);
-            print_wabbit("sample", fresh_vec, z, sketch_size);
+            tuple<hash_t*, int*, int> m = merge(read_vecs, sketch_size, 0);
+            hash_t* w_hashes = std::get<0>(m);
+            int* w_counts = std::get<1>(m);
+            int w_len = std::get<2>(m);
+            vector<hash_t> fresh_vec(w_hashes, w_hashes + w_len);
+            vector<int> counts(w_counts, w_counts + w_len);
+            print_wabbit("sample", fresh_vec, w_len, sketch_size, counts);
         }
 
 

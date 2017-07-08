@@ -11,10 +11,12 @@
 #include <unordered_map>
 #include <omp.h>
 #include "mkmh.hpp"
+#include "HASHTCounter.hpp"
 
 
 using namespace std;
 using namespace mkmh;
+using namespace HTC;
 
 struct c_comp{
     bool operator() (const hash_t& lhs, const hash_t& rhs) const {return lhs < rhs;};
@@ -54,6 +56,32 @@ struct min_heap{
     };
 };
 
+
+inline tuple<hash_t*, int*, int> merge(vector<vector<hash_t>> mins, int sketch_size, int max){
+    HASHTCounter ht(100000000);
+    min_heap k;
+    k.init(sketch_size * 2);
+    for (auto x : mins){
+        for (auto y : x){
+            ht.increment(y);
+            k.insert(y);
+        }   
+    }
+    k.resize();
+    
+    hash_t* ret = new hash_t [k.con.size()];
+    int ret_sz = 0;
+    int* counts = new int [k.con.size()];
+    for (auto x = k.con.begin(); x != k.con.end(); x++){
+       ret[ret_sz] = *x;
+       counts[ret_sz] = ht.get(*x);
+       ++ret_sz;
+    }
+    
+    return std::make_tuple(ret, counts, ret_sz);
+    
+
+};
 
 /**
  * takes a vector<vector<hasht>>, the mins of the reads set AND the sketch size
