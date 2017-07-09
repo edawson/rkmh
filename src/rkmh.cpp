@@ -459,9 +459,10 @@ void rkmh_binary_output(vector<string> keys,
 
 void print_wabbit(string key,
                   vector<hash_t>& mins,
-                  int& sketch_len,
-                  int& sketch_size,
+                  int sketch_len,
+                  int sketch_size,
                   vector<int> counts,
+                  vector<int> kmers,
                   string label = "XYX",
                   string nspace = "vir"){
 
@@ -478,6 +479,7 @@ void print_wabbit(string key,
         }
 
         }
+       cout << " |sketch k:" << kmers[0] << " " << "s:" << sketch_size;
               cout << endl;
 }
 
@@ -2162,7 +2164,7 @@ int main_filter(int argc, char** argv){
         int min_kmer_occ = 0;
         int min_matches = -1;
         int min_diff = 0;
-        int max_samples = 1000000;
+        int max_samples = 100000;
 
         bool doReadDepth = false;
         bool doReferenceDepth = false;
@@ -2314,17 +2316,18 @@ int main_filter(int argc, char** argv){
         // Otherwise we'll get collisions and that's no good
 
         if (!ref_keys.empty()){
-            ref_htc_size = (int) ((double) (ref_keys.size() * ref_lens[0]) * 2.7);
+            //ref_htc_size = (int) ((double) (ref_keys.size() * ref_lens[0]) * 2.7);
+            ref_htc_size = 100000000;
         }
 
-        HASHTCounter refhtc( ref_htc_size );
 
         if (!read_keys.empty()){
-            read_htc_size = (int)  ((double) (read_keys.size() * read_lens[0]) * 2.7);
+            //read_htc_size = (int)  ((double) (read_keys.size() * read_lens[0]) * 2.7);
+            read_htc_size = 100000000;
         }
 
         HASHTCounter readhtc( read_htc_size );
-
+        HASHTCounter refhtc( ref_htc_size );
 
 
 
@@ -2379,20 +2382,17 @@ int main_filter(int argc, char** argv){
                 int sketch_len = 0;
                 vector<hash_t> ref_mins(sketch_size);
                 std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
-                if (max_samples < 10000){
-                    for (int j = 0; j < ref_hash_nums[i], sketch_len < sketch_size; ++j){
-                        //if (ref_sketch_lens[i] >= sketch_size){
-                        //    break;
-                        //}
+                if (doReferenceDepth){
+                    for (int j = 0; j < ref_hash_nums[i]; ++j){
+
                         hash_t curr = *(ref_hashes[i] + j);
-                        //cerr << ref_hash_counter.get(curr) << endl;
-                        if (curr != 0 && refhtc.get(curr) <= max_samples){
+                        if (curr != 0 & refhtc.get(curr) <= max_samples){
                             ref_mins[sketch_len] = curr;
-                            //ref_mins[i][ref_min_lens[i]] = ref_hashes[i][j];
                             ++sketch_len;
-                            if (sketch_len == sketch_size){
+                            if ( j == ref_hash_nums[i] | sketch_len >= sketch_size | sketch_len == ref_hash_nums[i]){
                                 break;
                             }
+
                         }
                         else{
                             continue;
@@ -2405,16 +2405,21 @@ int main_filter(int argc, char** argv){
                     while (ref_hashes[i][start_offset] == 0 && start_offset < ref_lens[i]){
                         ++start_offset;
                     }
-                    for (int j = start_offset; j < ref_lens[i], sketch_len < sketch_size; ++j){
+                    for (int j = start_offset; j < ref_hash_nums[i]; ++j){
                         ref_mins[ sketch_len] = *(ref_hashes[i] + j);
                         ++sketch_len;
+                        if (sketch_len >= sketch_size){
+                            break;
+                        }
+
                     }
 
                 }
 
                 if (wabbitize){
                     vector<int> counts;
-                    print_wabbit(ref_keys[i], ref_mins, sketch_len, sketch_size, counts);
+                    //cerr << sketch_len << " " << ref_mins.size() << " " << ref_hash_nums[i] << " " << sketch_size << endl;
+                    print_wabbit(ref_keys[i], ref_mins, sketch_len, sketch_size, counts, kmer);
                 }
                 else {
                     json jj = dump_hash_json(ref_keys[i],
@@ -2476,7 +2481,7 @@ int main_filter(int argc, char** argv){
                 #pragma omp critical
                 {
                     vector<int> counts;
-                    print_wabbit(read_keys[i], read_vec, sz, sketch_size, counts);
+                    print_wabbit(read_keys[i], read_vec, sz, sketch_size, counts, kmer);
                 }
             }
             else{
@@ -2504,7 +2509,7 @@ int main_filter(int argc, char** argv){
             int w_len = std::get<2>(m);
             vector<hash_t> fresh_vec(w_hashes, w_hashes + w_len);
             vector<int> counts(w_counts, w_counts + w_len);
-            print_wabbit("sample", fresh_vec, w_len, sketch_size, counts);
+            print_wabbit("sample", fresh_vec, w_len, sketch_size, counts, kmer);
         }
 
 
