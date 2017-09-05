@@ -1616,6 +1616,7 @@ int main_filter(int argc, char** argv){
         int window_len = 100;
 
         bool show_depth = false;
+        bool output_vcf = false;
 
         int c;
         int optind = 2;
@@ -1989,8 +1990,13 @@ int main_filter(int argc, char** argv){
                                 if ( !show_depth && alt_depth > .9 * avg_d){
                                     int pos = j + alt_pos + 1;
                                     //outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tRESCUE_DEPTH: " << alt_depth << "\tORIGINAL_DEPTH: " << depth << "\tSURROUNDING_AVG: " << avg_d<< endl;
-                                    outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tRESCUE_DEPTH: " << alt_depth << endl;
-                                    outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt << endl;
+                                    if (output_vcf){
+                                        outre << "X" << "\t" << pos << "\t" << "." << "\t" << orig << "\t" << x << endl;
+                                    }
+                                    else{
+                                        outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tRESCUE_DEPTH: " << alt_depth << endl;
+                                        outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt << endl;
+                                    }
                                 }
                                 alt[alt_pos] = orig;
                             }
