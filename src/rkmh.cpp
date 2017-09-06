@@ -1616,7 +1616,7 @@ int main_filter(int argc, char** argv){
         int window_len = 100;
 
         bool show_depth = false;
-        bool output_vcf = false;
+        bool output_vcf = true;
 
         int c;
         int optind = 2;
@@ -1774,7 +1774,6 @@ int main_filter(int argc, char** argv){
 
         vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
 
-        vector<string> s_buf(ref_keys.size());
 
 #pragma omp master
         cerr << "Hashing references... ";
@@ -1839,7 +1838,6 @@ int main_filter(int argc, char** argv){
             //string mut;
 
             vector<string> ret;
-            //vector<tuple<string, int, string> > ret;
             // SNPs, 3 * sequence length
             for (int i = 0; i < x.size(); i++){
                 char orig = x[i];
@@ -1915,6 +1913,32 @@ int main_filter(int argc, char** argv){
 
         vector<int*> depth_arrs(ref_keys.size());
 
+        if (ref_keys.size() > 1){
+            cerr << "WARNING: more than one ref provided. VCF will not be correct" << endl;
+            
+        }
+        if (output_vcf){
+            cout << "##fileformat=VCF4.2\n##source=rkmh\n##reference=" << ref_files[0] << 
+                "INFO=<>" << endl
+                << "INFO=<>" << endl
+                << "INFO=<>" 
+                << endl;
+        }
+
+        std::function<string(vector<string>)> join = [](vector<string> strs){
+            stringstream strstream;
+            for (int i = 0; i < strs.size() - 1; i++){
+                strstream << strs[i] << "_";
+            }
+            strstream << strs[strs.size() - 1];
+            return strstream.str();
+        };
+
+        map<string, int> call_count;
+        map<string, int> call_max_depth;
+        vector<string> outbuf;
+        outbuf.reserve(1000);
+
 
 #pragma omp parallel
         {
@@ -1948,36 +1972,13 @@ int main_filter(int argc, char** argv){
 
                     // This line outputs the current avg depth at a position.
                     if (show_depth){
-                        //avg(vector<int>(d_window.begin(), d_window.end()))
                         outre << j << "\t" << avg_d << "\t" <<  depth;
-                        /** 
-                          string ref = string(ref_seqs[i] + j, kmer[0]);
-                          string alt(ref);
-
-
-                          int max_rescue = 0;
-                          if (depth < .5 * avg_d){
-                          for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
-                          char orig = alt[alt_pos];
-                          for (auto x : rotate_snps(orig)){
-                          alt[alt_pos] = x;
-                          int alt_depth = read_hash_to_depth[calc_hash(alt)];
-                          if (alt_depth > max_rescue){
-                          max_rescue = alt_depth;
-                          }
-
-                          alt[alt_pos] = orig;
-                          }
-
-                          }
-                          */
-                        //}
-
 
                     }
                     if (depth < .5 * avg_d){
                         string ref = string(ref_seqs[i] + j, kmer[0]);
                         string alt(ref);
+                        string d_alt = (j > 0) ? string(ref_seqs[i] + j - 1, kmer[0] + 1) : "";
 
                         // SNPs
                         for (int alt_pos = 0; alt_pos < alt.size(); alt_pos++){
@@ -1991,11 +1992,20 @@ int main_filter(int argc, char** argv){
                                     int pos = j + alt_pos + 1;
                                     //outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tRESCUE_DEPTH: " << alt_depth << "\tORIGINAL_DEPTH: " << depth << "\tSURROUNDING_AVG: " << avg_d<< endl;
                                     if (output_vcf){
-                                        outre << "X" << "\t" << pos << "\t" << "." << "\t" << orig << "\t" << x << endl;
+                                        #pragma omp critical
+                                        {
+                                            stringstream sstream;
+                                            sstream << ref_keys[i] << "\t" << pos << "\t" << "." << "\t" << orig << "\t" << x;
+                                            string s = sstream.str();
+                                            call_count[s] += 1;
+                                            if (alt_depth > call_max_depth[s]){
+                                                call_max_depth[s] = alt_depth;
+                                            }
+                                        }
                                     }
                                     else{
                                         outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tRESCUE_DEPTH: " << alt_depth << endl;
-                                        outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt << endl;
+                                        outre << "\t" << "old: " << ref << endl << "\t" << "new: " << alt;
                                     }
                                 }
                                 alt[alt_pos] = orig;
@@ -2009,103 +2019,34 @@ int main_filter(int argc, char** argv){
                         // TODO both insertions and deletions are tough because we don't know whether to take a trailing or
                         // precending character in building the new kmer. Either might be optimal.
                         if (j > 0){
-                            char* k_alt = new char[kmer[0] + 1];
-                            k_alt[kmer[0]] = '\0';
-                            for (int alt_pos = 0; alt_pos < kmer[0]; ++alt_pos){
-                                char orig = alt[alt_pos];
-                                char front_hanger = *(ref_seqs[i] + j + kmer[0] + 1);
-                                char tail_hanger = *(ref_seqs[i] + j - 1);
-                                // Shift all characters left one, tack ref[start] + k + 1 char onto end
-                                // hash it and check its depth.
-                                k_alt[0] = front_hanger;
-                                int k_alt_pos = 1;
-                                for (int k_pos = 0; k_pos < alt.size(), k_alt_pos < alt.size(); k_pos++){
-                                    if (k_pos == alt_pos){
-                                        continue;
-                                    }
-                                    k_alt[k_alt_pos] = ref[k_pos];
-                                    k_alt_pos++; 
-                                }
-
-                                /// TEST DEPTH
-                                int alt_depth = read_hash_to_depth[calc_hash(k_alt, kmer[0])];
-                                if (!show_depth && alt_depth > .9 * avg_d){
+                            for (int alt_pos = 1; alt_pos < d_alt.size(); alt_pos++){
+                                stringstream mod;
+                                char orig = d_alt[alt_pos];
+                                mod << d_alt.substr(0, alt_pos) << d_alt.substr(alt_pos + 1, d_alt.length() - alt_pos);
+                                int alt_depth = read_hash_to_depth[calc_hash(mod.str())];
+                                if (!show_depth && alt_depth > 0.9 * avg_d){
                                     int pos = j + alt_pos + 1;
-                                    //outre << "CALL: " << ref[alt_pos] << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << "\tORIGINAL_DEPTH: " << depth << "\tSURROUNDING_AVG: " << avg_d << endl;
-                                    outre << "CALL: " << ref[alt_pos] << "->" << "DEL" << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
-                                    outre << "\t" << "old: " << " " << ref << endl << "\t" << "new: " << k_alt << endl;
-
-                                }
-
-
-                                /// Homopolymer Insertions, 1bp
-                                k_alt_pos = 0;
-                                for (int k_pos = 0; k_alt_pos < ref.size(); ++k_pos){
-                                    k_alt[k_alt_pos] = ref[k_pos];
-                                    if (k_pos == alt_pos){
-                                        k_alt[++k_alt_pos] = ref[k_pos];
-                                    }
-                                    ++k_alt_pos;
-                                }
-
-                                alt_depth = read_hash_to_depth[calc_hash(k_alt, kmer[0])];
-                                if (!show_depth && alt_depth > .9 * avg_d){
-                                    int pos = j + alt_pos + 1;
-                                    //outre << "CALL: " << ref[alt_pos] << "->" << ref[alt_pos] << ref[alt_pos] << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << "\tORIGINAL_DEPTH: " << depth << "\tSURROUNDING_AVG: " << avg_d << endl;
-                                    outre << "CALL: " << ref[alt_pos] << "->" << ref[alt_pos] << ref[alt_pos] << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
-                                    outre << "\t" << "old: " << ref << endl << "\t" << "new: " << k_alt << endl;
-
-                                }
-
-
-
-                                // Non-homopolymer 1bp insertions
-                                orig = ref[alt_pos]; 
-                                for (auto x : rotate_snps(orig)){
-                                    k_alt_pos = 0;
-                                    for (int k_pos = 0; k_alt_pos < ref.size(); ++k_pos){
-                                        k_alt[k_alt_pos] = ref[k_pos];
-                                        if (k_pos == alt_pos){
-                                            k_alt[++k_alt_pos] = x;
-                                        }
-                                        ++k_alt_pos;
-                                    }
-
-                                    alt_depth = read_hash_to_depth[calc_hash(k_alt, kmer[0])];
-                                    if (!show_depth && alt_depth > .9 * avg_d){
-                                        int pos = j + alt_pos + 1;
-                                        //outre << "CALL: " << ref[alt_pos] << "->" << ref[alt_pos] << x << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << "\tORIGINAL_DEPTH: " << depth << "\tSURROUNDING_AVG: " << avg_d << endl;
-                                        outre << "CALL: " << ref[alt_pos] << "->" << ref[alt_pos] << x << "\t" << "POS: " << pos << "\tDEPTH: " << alt_depth << endl;
-                                        outre << "\t" << "old: " << ref << endl << "\t" << "new: " << k_alt << endl;
-
+                                    stringstream sstream;
+                                    sstream << ref_keys[i] << "\t" << pos << "\t" << "." << "\t" << orig << "\t" << "-";
+                                    string s = sstream.str();
+                                    call_count[s] += 1;
+                                    if (alt_depth > call_max_depth[s]){
+                                        call_max_depth[s] = alt_depth;
                                     }
                                 }
-
                             }
-
-                            delete [] k_alt;
+    
+                            // Insertions
+                            //
                         }
-
-
-                        // Insertions
-                        //
-
+                        
 
 
                     }
 
                     if (show_depth){
-                        outre << "\t" << (max_rescue > 0 ? max_rescue : depth) << endl;
+                        outre << "\t" << (max_rescue > 0 ? max_rescue : depth);
                     }
-
-
-
-                    //outre << endl;
-                    // TODO this critical is only needed because GCC doesn't adhere to atomic STDOUT
-#pragma omp critical
-                    cout << outre.str();
-                    //s_buf[i] = outre.str();
-                    outre.str("");
 
                 }
 
@@ -2113,9 +2054,9 @@ int main_filter(int argc, char** argv){
 
         }
 
-        //for (auto x : s_buf){
-        //cout << x;
-        //}
+        for (auto x : call_count){
+            cout << x.first << "\t" << x.second << "\t" << call_max_depth[x.first] << endl;
+        }
 
         for (auto x : read_hashes){
             delete [] x;;
@@ -2177,6 +2118,7 @@ int main_filter(int argc, char** argv){
         bool wabbitize = false;
         bool merge_sketch = false;
 
+        bool traditional_minhash = false;
         string outname = "";
 
         int c;
@@ -2205,12 +2147,16 @@ int main_filter(int argc, char** argv){
             };
 
             int option_index = 0;
-            c = getopt_long(argc, argv, "hwk:f:r:s:t:mM:I:o:", long_options, &option_index);
+
+            c = getopt_long(argc, argv, "Thwk:f:r:s:t:mM:I:o:", long_options, &option_index);
             if (c == -1){
                 break;
             }
 
             switch (c){
+                case 'T':
+                    traditional_minhash = true;
+                    break;
                 case 'm':
                     merge_sketch = true;
                     break;
@@ -2309,6 +2255,33 @@ int main_filter(int argc, char** argv){
         }
 
 
+        if (traditional_minhash){
+            vector<vector<hash_t> > ref_mins(ref_keys.size());
+            vector<vector<hash_t> > read_mins(read_keys.size());
+            for (int i = 0; i < ref_keys.size(); i++){
+                string xseq = string(ref_seqs[i]);
+                ref_mins[i] = minhash_64(xseq, kmer, sketch_size);
+            }
+            for (int i = 0; i < read_keys.size(); i++){
+
+                string yseq = string(read_seqs[i]);
+                read_mins[i] = minhash_64(yseq, kmer, sketch_size);
+            }
+            vector<string> obuf (read_mins.size() * ref_mins.size());
+            for (int i = 0; i < read_mins.size(); i++){
+                for (int j = 0; j < ref_mins.size(); j++){
+                    stringstream outre;
+                    vector<hash_t> inter = hash_intersection(read_mins[i], ref_mins[j]);
+                    outre << read_keys[i] << "\t" << ref_keys[j] << "\t"  << inter.size() << "\t" << (min(ref_mins[j].size(), read_mins[i].size())) << endl;
+                    string s = outre.str();
+                    #pragma omp critical
+                    cout << s;
+                }
+            }
+        exit(0);
+        }
+
+
         vector<hash_t*> read_mins(read_keys.size());
         int* read_min_starts = new int [ read_keys.size() ];
         int* read_min_lens = new int [read_keys.size() ];
@@ -2378,8 +2351,6 @@ int main_filter(int argc, char** argv){
 
 #pragma omp master
         cerr << ref_keys.size() << " references and " << read_keys.size() << " reads parsed and hashed." << endl;
-
-
 #pragma omp parallel
         {
 
