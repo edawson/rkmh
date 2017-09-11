@@ -1681,6 +1681,7 @@ int main_filter(int argc, char** argv){
                     break;
                 case 'd':
                     show_depth = true;
+                    output_vcf = false;
                     break;
                 default:
                     print_help(argv);
