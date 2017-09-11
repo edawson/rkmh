@@ -1918,10 +1918,10 @@ int main_filter(int argc, char** argv){
             
         }
         if (output_vcf){
-            cout << "##fileformat=VCF4.2\n##source=rkmh\n##reference=" << ref_files[0] << 
-                "INFO=<>" << endl
-                << "INFO=<>" << endl
-                << "INFO=<>" 
+            cout << "##fileformat=VCF4.2\n##source=rkmh\n##reference=" << ref_files[0] << endl <<
+                "##INFO=<ID=KD,Number=1,Type=Integer,Description=\"Number of times call for specific kmer appears\">" << endl
+                << "##INFO=<ID=MD,Number=1,Type=Integer,Description=\"Maximum depth found for the rescue kmer.\">" << endl
+                << "##INFO=<ID=RD,Number=1,Type=Integer,Description=\"Average depth in region\">"
                 << endl;
         }
 
@@ -1936,6 +1936,7 @@ int main_filter(int argc, char** argv){
 
         map<string, int> call_count;
         map<string, int> call_max_depth;
+        map<string, int> call_avg_depth;
         vector<string> outbuf;
         outbuf.reserve(1000);
 
@@ -1946,7 +1947,7 @@ int main_filter(int argc, char** argv){
             list<int> d_window;
 
 
-#pragma omp for
+            #pragma omp for
             for (int i = 0; i < ref_keys.size(); i++){
                 // This loop iterates over the reference genomes.
 
@@ -1998,6 +1999,7 @@ int main_filter(int argc, char** argv){
                                             sstream << ref_keys[i] << "\t" << pos << "\t" << "." << "\t" << orig << "\t" << x;
                                             string s = sstream.str();
                                             call_count[s] += 1;
+                                            call_avg_depth[s] = max(avg_d, call_avg_depth[s]);
                                             if (alt_depth > call_max_depth[s]){
                                                 call_max_depth[s] = alt_depth;
                                             }
@@ -2024,12 +2026,13 @@ int main_filter(int argc, char** argv){
                                 char orig = d_alt[alt_pos];
                                 mod << d_alt.substr(0, alt_pos) << d_alt.substr(alt_pos + 1, d_alt.length() - alt_pos);
                                 int alt_depth = read_hash_to_depth[calc_hash(mod.str())];
-                                if (!show_depth && alt_depth > 0.9 * avg_d){
+                                if (output_vcf && alt_depth > 0.9 * avg_d){
                                     int pos = j + alt_pos + 1;
                                     stringstream sstream;
                                     sstream << ref_keys[i] << "\t" << pos << "\t" << "." << "\t" << orig << "\t" << "-";
                                     string s = sstream.str();
                                     call_count[s] += 1;
+                                    call_avg_depth[s] = max(call_avg_depth[s], avg_d);
                                     if (alt_depth > call_max_depth[s]){
                                         call_max_depth[s] = alt_depth;
                                     }
@@ -2055,7 +2058,8 @@ int main_filter(int argc, char** argv){
         }
 
         for (auto x : call_count){
-            cout << x.first << "\t" << x.second << "\t" << call_max_depth[x.first] << endl;
+            cout << x.first << "\t" << "99" << "\t" << "PASS" << "\t" << "KC=" << x.second << ";" <<
+                "MD=" << call_max_depth[x.first] << ";" << "RD=" << call_avg_depth[x.first] << endl;
         }
 
         for (auto x : read_hashes){
@@ -2267,12 +2271,11 @@ int main_filter(int argc, char** argv){
                 string yseq = string(read_seqs[i]);
                 read_mins[i] = minhash_64(yseq, kmer, sketch_size);
             }
-            vector<string> obuf (read_mins.size() * ref_mins.size());
             for (int i = 0; i < read_mins.size(); i++){
                 for (int j = 0; j < ref_mins.size(); j++){
                     stringstream outre;
                     vector<hash_t> inter = hash_intersection(read_mins[i], ref_mins[j]);
-                    outre << read_keys[i] << "\t" << ref_keys[j] << "\t"  << inter.size() << "\t" << (min(ref_mins[j].size(), read_mins[i].size())) << endl;
+                    outre << read_keys[i] << "\t" << ref_keys[j] << "\t"  << "NA" << "\t" << "NA" << "\t" << inter.size() << "/" << (min(ref_mins[j].size(), read_mins[i].size())) << endl;
                     string s = outre.str();
                     #pragma omp critical
                     cout << s;
