@@ -1923,6 +1923,7 @@ int main_filter(int argc, char** argv){
                 "##INFO=<ID=KD,Number=1,Type=Integer,Description=\"Number of times call for specific kmer appears\">" << endl
                 << "##INFO=<ID=MD,Number=1,Type=Integer,Description=\"Maximum depth found for the rescue kmer.\">" << endl
                 << "##INFO=<ID=RD,Number=1,Type=Integer,Description=\"Average depth in region\">"
+                << "##INFO=<ID=OD,Number=1,Type=Integer,Description=\"Depth of original kmer at site before modification.\">"
                 << endl;
         }
 
@@ -1938,6 +1939,7 @@ int main_filter(int argc, char** argv){
         map<string, int> call_count;
         map<string, int> call_max_depth;
         map<string, int> call_avg_depth;
+        map<string, int> call_orig_depth;
         vector<string> outbuf;
         outbuf.reserve(1000);
 
@@ -1990,17 +1992,19 @@ int main_filter(int argc, char** argv){
                                 int alt_depth = read_hash_to_depth[calc_hash(alt)];
                                 max_rescue = max_rescue > alt_depth ? max_rescue : alt_depth;
 
-                                if ( !show_depth && alt_depth > .9 * avg_d){
+                                if ( !show_depth && alt_depth >= .1 * avg_d & alt_depth > depth){
                                     int pos = j + alt_pos + 1;
                                     //outre << "CALL: " << orig << "->" << x << "\t" << "POS: " << pos << "\tRESCUE_DEPTH: " << alt_depth << "\tORIGINAL_DEPTH: " << depth << "\tSURROUNDING_AVG: " << avg_d<< endl;
                                     if (output_vcf){
                                         #pragma omp critical
                                         {
                                             stringstream sstream;
-                                            sstream << ref_keys[i] << "\t" << pos << "\t" << "." << "\t" << orig << "\t" << x;
+                                            sstream << ref_keys[i] << "\t" << pos << "\t" <<
+                                                "." << "\t" << orig << "\t" << x;
                                             string s = sstream.str();
                                             call_count[s] += 1;
                                             call_avg_depth[s] = max(avg_d, call_avg_depth[s]);
+                                            call_orig_depth[s] = max(call_orig_depth[s], depth);
                                             if (alt_depth > call_max_depth[s]){
                                                 call_max_depth[s] = alt_depth;
                                             }
@@ -2034,6 +2038,7 @@ int main_filter(int argc, char** argv){
                                     string s = sstream.str();
                                     call_count[s] += 1;
                                     call_avg_depth[s] = max(call_avg_depth[s], avg_d);
+                                    call_orig_depth[s] = max(call_orig_depth[s], depth);
                                     if (alt_depth > call_max_depth[s]){
                                         call_max_depth[s] = alt_depth;
                                     }
@@ -2060,7 +2065,7 @@ int main_filter(int argc, char** argv){
 
         for (auto x : call_count){
             cout << x.first << "\t" << "99" << "\t" << "PASS" << "\t" << "KC=" << x.second << ";" <<
-                "MD=" << call_max_depth[x.first] << ";" << "RD=" << call_avg_depth[x.first] << endl;
+                "MD=" << call_max_depth[x.first] << ";" << "RD=" << call_avg_depth[x.first] << ";OD=" << call_orig_depth[x.first] << endl;
         }
 
         for (auto x : read_hashes){
