@@ -23,8 +23,6 @@ rkmh: $(SRC_DIR)/rkmh.o $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a $(SRC_DIR)/HASHTCoun
 $(SRC_DIR)/rkmh.o: $(SRC_DIR)/rkmh.cpp $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a $(SRC_DIR)/HASHTCounter.o
 	$(CXX) $(CXXFLAGS) -c -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
-static: $(SRC_DIR)/rkmh.cpp $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a
-	$(CXX) $(CXXFLAGS) $(STATIC_FLAG) -o rkmh $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
 mkmh/libmkmh.a: mkmh/mkmh.cpp mkmh/mkmh.hpp
 	cd mkmh && $(MAKE) clean && $(MAKE)
