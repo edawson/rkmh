@@ -9,7 +9,7 @@ namespace HTC{
         counts = new int [my_size];
     }
 
-    HASHTCounter::HASHTCounter(int64_t sz){
+    HASHTCounter::HASHTCounter(uint64_t sz){
         my_size = sz;
         counts = new int [my_size];
     }
@@ -25,6 +25,12 @@ namespace HTC{
             sst << counts[i] << endl;
         }
         return sst.str();
+    }
+
+    void HASHTCounter::print(){
+        for (int i = 0; i < my_size; i++){
+            cout << counts[i] << endl;
+        }
     }
 
     void HASHTCounter::increment(htc_type key){

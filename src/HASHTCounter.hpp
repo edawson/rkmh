@@ -14,7 +14,7 @@ class HASHTCounter{
 
     public:
         HASHTCounter();
-        HASHTCounter(int sz);
+        HASHTCounter(uint64_t sz);
         ~HASHTCounter();
         int& operator[](htc_type key);
 
@@ -33,11 +33,11 @@ class HASHTCounter{
         int* begin(void);
 
         std::string to_string();
+        void print();
         
     private:
-        int my_size;
+        uint64_t my_size;
         int* counts;
-        std::string my_big_string;
         
 };
 }

@@ -14,19 +14,21 @@
 #include <map>
 #include <unordered_map>
 #include "mkmh.hpp"
-#include "kseq.hpp"
+//#include "kseq.hpp"
 #include "equiv.hpp"
 #include "json.hpp"
 #include "HASHTCounter.hpp"
+#include "kseq_reader.hpp"
 
 // for convenience
 using json = nlohmann::json;
 
-KSEQ_INIT(gzFile, gzread)
+//KSEQ_INIT(gzFile, gzread)
 
     using namespace std;
     using namespace mkmh;
     using namespace HTC;
+    using namespace KSR;
 
 
 
@@ -2277,10 +2279,27 @@ int main_filter(int argc, char** argv){
         return 0;
     }
 
+
+    /**
+     *  Search: take in a reference set of hashes and query
+     *  a set of FASTA/FASTQ files against them to find queries
+     *  that contain those hashes.
+     * 
+     */
     int main_search(int argc, char** argv){
+        // These are just lists of hashes,
+        // one list per line
+        // token[0] is the name of the reference
         vector<char*> ref_files;
+        // These are fastqs/fastas
         vector<char*> read_files;
+
+        int bufsz = 500;
+
+        string summary_file_suffix = "rkmh.summary.txt";
+
         int threads = 1;
+        vector<int> kmer;
 
         int c;
         int optind = 2;
@@ -2294,14 +2313,16 @@ int main_filter(int argc, char** argv){
             static struct option long_options[] =
             {
                 {"help", no_argument, 0, 'h'},
-                {"infile", required_argument, 0, 'i'},
+                {"fasta", required_argument, 0, 'f'},
+                {"reference", required_argument, 0, 'r'},
                 {"threads", required_argument, 0, 't'},
+                {"kmer", required_argument, 0, 'k'},
                 {0,0,0,0}
             };
 
             int option_index = 0;
 
-            c = getopt_long(argc, argv, "ti:h", long_options, &option_index);
+            c = getopt_long(argc, argv, "k:f:r:h", long_options, &option_index);
             if (c == -1){
                 break;
             }
@@ -2310,8 +2331,14 @@ int main_filter(int argc, char** argv){
                 case 't':
                     threads = atoi(optarg);
                     break;
-                case 'i':
+                case 'k':
+                    kmer.push_back(stoi(optarg));
+                    break;
+                case 'f':
                     read_files.push_back(optarg);
+                    break;
+                case 'r':
+                    ref_files.push_back(optarg);
                     break;
                 case '?':
                 case 'h':
@@ -2322,6 +2349,68 @@ int main_filter(int argc, char** argv){
                     //print_help(argv);
                     abort();
 
+            }
+        }
+
+        std::map<string, HASHTCounter> ref_to_ht;
+        for (auto r : ref_files){
+            ifstream infile(r);
+            string line;
+            while(getline(infile, line)){
+                vector<string> tokens = split(line, '\t');
+                HASHTCounter refhtc(65000);
+                ref_to_ht[tokens[0]] = refhtc;
+                for (int i = 2; i < tokens.size(); ++i){
+                    ref_to_ht[tokens[0]].increment((hash_t) stoull(tokens[i]));
+                }
+            }
+        }
+
+        
+    //#pragma omp parallel
+    {
+    //#pragma omp single
+    {
+        for (auto f : read_files){
+            
+                    KSEQ_Reader kh(f);
+                    kh.buffer_size(bufsz);
+                    //#pragma omp task
+                    {
+                        ksequence_t* buf;
+                        int buflen;
+                        while (kh.get_next_buff(buf, buflen)){
+                        // Iterate over a buffer of sequences
+                            for (int i = 0; i < buflen; ++i){
+                            stringstream seqstr;
+                            seqstr << (buf + i)->name << "\t";
+                            int seqlen = (buf + i)->length;
+                            // Hash kmers in the seqs to 64 bit ints
+                            tuple<hash_t*, int> hashes = allhash_unsorted_64_fast((const char* ) (buf + i)->sequence, seqlen, kmer);
+                            hash_t* start = std::get<0>(hashes);
+                            int num = std::get<1>(hashes);
+                            // Check if each hash is in the ref set
+                            // Report the number of matches with each reference
+                            
+                            for (std::map<string, HASHTCounter>::iterator it = ref_to_ht.begin();
+                                it != ref_to_ht.end(); it++){
+                                    int intersection = 0;
+                                    for (int j = 0; j < num; ++j){
+                                        if (it->second.get( *(start + j)) > 0){
+                                            intersection++;
+                                        }
+                                    }
+                                    #pragma omp critical
+                                    cout << it->first << ":" << intersection << "/" << "NA" <<endl;
+                            }
+                            //delete [] start;
+                            
+                            
+                            }
+                        }
+                    }
+
+                }
             }
         }
     }
@@ -2376,20 +2465,27 @@ int main_filter(int argc, char** argv){
 
         omp_set_num_threads(threads);
 
-        for (auto r : read_files){
-            HASHTCounter htc(6400000000);
+        //#pragma omp single
+        {
+            for (auto r : read_files){
+            HASHTCounter htc(640000);
             ifstream infile(r);
             string line;
             while (getline(infile, line))
             {
-                vector<string> tokens = split(line, '\t');
-                for (int i = 2; i < tokens.size(); ++i){
-                    //cout << tokens[i] << endl;
-                    htc.increment((hash_t) stoull(tokens[i]));
+                //#pragma omp task
+                {
+                    vector<string> tokens = split(line, '\t');
+                    for (int i = 2; i < tokens.size(); ++i){
+                        uint64_t h = stoull(tokens[i]);
+                        htc.increment((hash_t) h );
+                    }
                 }
             }
-            cout << htc.to_string();
+            htc.print();
         }
+        }
+        
     }
 
     /**
@@ -2760,6 +2856,9 @@ int main_filter(int argc, char** argv){
             }
             else if (cmd == "count"){
                 return main_count(argc, argv);
+            }
+            else if (cmd == "search"){
+                return main_search(argc, argv);
             }
             else if (cmd == "stream"){
                 return main_stream(argc, argv);
