@@ -9,7 +9,7 @@ namespace HTC{
         counts = new int [my_size];
     }
 
-    HASHTCounter::HASHTCounter(int sz){
+    HASHTCounter::HASHTCounter(int64_t sz){
         my_size = sz;
         counts = new int [my_size];
     }

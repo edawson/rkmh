@@ -2129,6 +2129,8 @@ int main_filter(int argc, char** argv){
         bool merge_sketch = false;
 
         bool traditional_minhash = false;
+        bool output_kmers = false;
+        bool output_counts = false;
         string outname = "";
 
         int c;
@@ -2143,7 +2145,9 @@ int main_filter(int argc, char** argv){
             static struct option long_options[] =
             {
                 {"help", no_argument, 0, 'h'},
+                {"count", no_argument, 0, 'c'},
                 {"kmer", no_argument, 0, 'k'},
+                {"output=kmers", no_argument, 0, 'K'},
                 {"merge-sample", no_argument, 0, 'm'},
                 {"wabbitize", no_argument, 0, 'w'},
                 {"fasta", required_argument, 0, 'f'},
@@ -2158,7 +2162,7 @@ int main_filter(int argc, char** argv){
 
             int option_index = 0;
 
-            c = getopt_long(argc, argv, "Thwk:f:r:s:t:mM:I:o:", long_options, &option_index);
+            c = getopt_long(argc, argv, "ThcwKk:f:r:s:t:mM:I:o:", long_options, &option_index);
             if (c == -1){
                 break;
             }
@@ -2166,6 +2170,9 @@ int main_filter(int argc, char** argv){
             switch (c){
                 case 'T':
                     traditional_minhash = true;
+                    break;
+                case 'c':
+                    output_counts = true;
                     break;
                 case 'm':
                     merge_sketch = true;
@@ -2184,6 +2191,9 @@ int main_filter(int argc, char** argv){
                     break;
                 case 'k':
                     kmer.push_back(atoi(optarg));
+                    break;
+                case 'K':
+                    output_kmers = true;
                     break;
                 case '?':
                 case 'h':
@@ -2211,6 +2221,14 @@ int main_filter(int argc, char** argv){
             }
         }
 
+        if (kmer.size() != 0){
+            cerr << "Using a kmer size of " << kmer[0] << endl; 
+        }
+        else {
+            cerr << "Using default kmer size of 16." << endl;
+            kmer.push_back(16);
+        }
+
         omp_set_num_threads(threads);
 
         // In parallel
@@ -2218,6 +2236,8 @@ int main_filter(int argc, char** argv){
         // hash those reads
         // output said reads
 
+        
+        HASHTCounter read_counter(6400000000);
         kseq_t *seq;
         char* f = read_files[0];
         gzFile fp;
@@ -2229,19 +2249,147 @@ int main_filter(int argc, char** argv){
             char * x = new char[seq->seq.l];
             memcpy(x, seq->seq.s, seq->seq.l);
             int len = seq->seq.l;
-            tuple<hash_t*, int> r = allhash_unsorted_64_fast(x, len, kmer);
-            cout << seq->name.s;
-            int nhash = std::get<1>(r);
-            hash_t* hashes = std::get<0>(r);
-            for (int j = 0; j < nhash; ++j){
-                cout << " " << *(hashes + j);
+            cout << seq->name.s << "\t";
+            if (!output_kmers){
+                tuple<hash_t*, int> r = allhash_unsorted_64_fast(x, len, kmer);
+                
+                int nhash = std::get<1>(r);
+                hash_t* hashes = std::get<0>(r);
+                for (int j = 0; j < nhash; ++j){
+                    cout << "\t" << *(hashes + j);
+                }
+                cout << endl;
             }
-            cout << endl;
+            else{
+                // mkmh_kmer_list_t kl = kmerize(x, len, kmer[0]);
+                // for (int i = 0; i < kl.length; ++i){
+                //     cout << "\t" << *(kl.kmers + i);
+                // }
+                // cout << endl;
+                print_kmers(x, len, kmer[0]);
+                cout << endl;
+            }
+            
             delete [] x;
         } 
         gzclose(fp);
         kseq_destroy(seq);
         return 0;
+    }
+
+    int main_search(int argc, char** argv){
+        vector<char*> ref_files;
+        vector<char*> read_files;
+        int threads = 1;
+
+        int c;
+        int optind = 2;
+
+        if (argc <= 2){
+            help_hash(argv);
+            exit(1);
+        }
+
+        while (true){
+            static struct option long_options[] =
+            {
+                {"help", no_argument, 0, 'h'},
+                {"infile", required_argument, 0, 'i'},
+                {"threads", required_argument, 0, 't'},
+                {0,0,0,0}
+            };
+
+            int option_index = 0;
+
+            c = getopt_long(argc, argv, "ti:h", long_options, &option_index);
+            if (c == -1){
+                break;
+            }
+
+            switch (c){
+                case 't':
+                    threads = atoi(optarg);
+                    break;
+                case 'i':
+                    read_files.push_back(optarg);
+                    break;
+                case '?':
+                case 'h':
+                    //print_help(argv);
+                    exit(1);
+                    break;
+                default:
+                    //print_help(argv);
+                    abort();
+
+            }
+        }
+    }
+
+    int main_count(int argc, char** argv){
+        vector<char*> ref_files;
+        vector<char*> read_files;
+        int threads = 1;
+
+        int c;
+        int optind = 2;
+
+        if (argc <= 2){
+            help_hash(argv);
+            exit(1);
+        }
+
+        while (true){
+            static struct option long_options[] =
+            {
+                {"help", no_argument, 0, 'h'},
+                {"infile", required_argument, 0, 'i'},
+                {"threads", required_argument, 0, 't'},
+                {0,0,0,0}
+            };
+
+            int option_index = 0;
+
+            c = getopt_long(argc, argv, "ti:h", long_options, &option_index);
+            if (c == -1){
+                break;
+            }
+
+            switch (c){
+                case 't':
+                    threads = atoi(optarg);
+                    break;
+                case 'i':
+                    read_files.push_back(optarg);
+                    break;
+                case '?':
+                case 'h':
+                    //print_help(argv);
+                    exit(1);
+                    break;
+                default:
+                    //print_help(argv);
+                    abort();
+
+            }
+        }
+
+        omp_set_num_threads(threads);
+
+        for (auto r : read_files){
+            HASHTCounter htc(6400000000);
+            ifstream infile(r);
+            string line;
+            while (getline(infile, line))
+            {
+                vector<string> tokens = split(line, '\t');
+                for (int i = 2; i < tokens.size(); ++i){
+                    //cout << tokens[i] << endl;
+                    htc.increment((hash_t) stoull(tokens[i]));
+                }
+            }
+            cout << htc.to_string();
+        }
     }
 
     /**
@@ -2609,6 +2757,9 @@ int main_filter(int argc, char** argv){
             }
             else if (cmd == "call"){
                 return main_call(argc, argv);
+            }
+            else if (cmd == "count"){
+                return main_count(argc, argv);
             }
             else if (cmd == "stream"){
                 return main_stream(argc, argv);
