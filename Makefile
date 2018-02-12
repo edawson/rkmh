@@ -14,15 +14,17 @@ endif
 
 SRC_DIR:=src
 
-LD_INC_FLAGS:= -Imkmh -Imkmh/murmur3 -I. #-Ikseq
-LD_LIB_FLAGS:= -Lmkmh/murmur3 -Lmkmh -lmkmh -lz -lmurmur3
+LD_INC_FLAGS:= -Imkmh -Imkmh/murmur3 -I. -Ikseq_reader
+LD_LIB_FLAGS:= -Lmkmh/murmur3 -Lmkmh -L. -lmkmh -lz -lmurmur3 -lksr
 
-rkmh: $(SRC_DIR)/rkmh.o $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a $(SRC_DIR)/HASHTCounter.o
+rkmh: $(SRC_DIR)/rkmh.o $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a $(SRC_DIR)/HASHTCounter.o libksr.a
 	$(CXX) $(CXXFLAGS) -o $@ $< $(SRC_DIR)/HASHTCounter.o $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
 $(SRC_DIR)/rkmh.o: $(SRC_DIR)/rkmh.cpp $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a $(SRC_DIR)/HASHTCounter.o
 	$(CXX) $(CXXFLAGS) -c -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
+libksr.a:
+	cd kseq_reader && $(MAKE) && cp libksr.a ../ && cp *.hpp ../
 
 mkmh/libmkmh.a: mkmh/mkmh.cpp mkmh/mkmh.hpp
 	cd mkmh && $(MAKE) clean && $(MAKE)
