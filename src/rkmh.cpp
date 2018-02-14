@@ -2352,67 +2352,54 @@ int main_filter(int argc, char** argv){
             }
         }
 
-        std::map<string, HASHTCounter> ref_to_ht;
+        std::map<string, HASHTCounter*> ref_to_ht;
         for (auto r : ref_files){
             ifstream infile(r);
             string line;
             while(getline(infile, line)){
                 vector<string> tokens = split(line, '\t');
-                HASHTCounter refhtc(65000);
+                HASHTCounter* refhtc = new HASHTCounter(65000);
                 ref_to_ht[tokens[0]] = refhtc;
                 for (int i = 2; i < tokens.size(); ++i){
-                    ref_to_ht[tokens[0]].increment((hash_t) stoull(tokens[i]));
+                    ref_to_ht[tokens[0]]->increment((hash_t) stoull(tokens[i]));
                 }
             }
         }
 
         
-    //#pragma omp parallel
-    {
-    //#pragma omp single
-    {
+
         for (auto f : read_files){
-            
-                    KSEQ_Reader kh(f);
-                    kh.buffer_size(bufsz);
-                    //#pragma omp task
-                    {
-                        ksequence_t* buf;
-                        int buflen;
-                        while (kh.get_next_buff(buf, buflen)){
-                        // Iterate over a buffer of sequences
-                            for (int i = 0; i < buflen; ++i){
-                            stringstream seqstr;
-                            seqstr << (buf + i)->name << "\t";
-                            int seqlen = (buf + i)->length;
-                            // Hash kmers in the seqs to 64 bit ints
-                            tuple<hash_t*, int> hashes = allhash_unsorted_64_fast((const char* ) (buf + i)->sequence, seqlen, kmer);
-                            hash_t* start = std::get<0>(hashes);
-                            int num = std::get<1>(hashes);
-                            // Check if each hash is in the ref set
-                            // Report the number of matches with each reference
-                            
-                            for (std::map<string, HASHTCounter>::iterator it = ref_to_ht.begin();
-                                it != ref_to_ht.end(); it++){
-                                    int intersection = 0;
-                                    for (int j = 0; j < num; ++j){
-                                        if (it->second.get( *(start + j)) > 0){
-                                            intersection++;
-                                        }
-                                    }
-                                    #pragma omp critical
-                                    cout << it->first << ":" << intersection << "/" << "NA" <<endl;
-                            }
-                            //delete [] start;
-                            
-                            
+            KSEQ_Reader kh;
+            kh.open(f);
+            kh.buffer_size(bufsz);
+            ksequence_t* buf;
+            int buflen;
+            int l = kh.get_next_buff(buf, buflen);
+            while (l == 0){
+                // Iterate over a buffer of sequences
+                for (int i = 0; i < buflen; ++i){
+                    stringstream seqstr;
+                    seqstr << (buf + i)->name << "\t";
+                    int seqlen = (buf + i)->length;
+                    tuple<hash_t*, int> hashes = allhash_unsorted_64_fast((buf + i)->sequence, seqlen, kmer);
+                    hash_t* start = std::get<0>(hashes);
+                    int num = std::get<1>(hashes);
+                    for (map<string, HASHTCounter*>::iterator it = ref_to_ht.begin();
+                    it != ref_to_ht.end();
+                    it++){
+                        int intersection = 0;
+                        for (int j = 0; j < num; j++){
+                            if (it->second->get( *(start + j) ) > 0){
+                                intersection++;
                             }
                         }
+                        cout << it->first << ":" << intersection << "/" << "NA" << endl;
                     }
-
                 }
+             l= kh.get_next_buff(buf, buflen);           
             }
         }
+        return 0;
     }
 
     int main_count(int argc, char** argv){
