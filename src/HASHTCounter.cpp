@@ -27,6 +27,15 @@ namespace HTC{
         return sst.str();
     }
 
+    void HASHTCounter::write_to_binary(string filename){
+        ofstream ostr;
+        ostr.open(filename, ios::out | ios::binary);
+        for (int i = 0; i < my_size; ++i){
+            ostr << counts[i];
+        }
+        ostr.close();
+    }
+
     void HASHTCounter::print(){
         for (int i = 0; i < my_size; i++){
             cout << counts[i] << endl;

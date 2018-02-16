@@ -6,6 +6,7 @@
 #include <omp.h>
 #include <cstdio>
 #include <sstream>
+#include <fstream>
 
 
 namespace HTC{
@@ -33,6 +34,7 @@ class HASHTCounter{
         int* begin(void);
 
         std::string to_string();
+        void write_to_binary(std::string filename);
         void print();
         
     private:
