@@ -2415,8 +2415,17 @@ int main_filter(int argc, char** argv){
         }
     }
 
+
+
+    /**
+     * Counts kmers and outputs their counts in a map
+     * that can be used for streaming.
+     * Essentially, it's streaming main_hash
+     * main_count( int argc, char** argv){
+     *  
+     * }
+     */
     int main_count(int argc, char** argv){
-        vector<char*> ref_files;
         vector<char*> read_files;
         int threads = 1;
 
@@ -2465,38 +2474,29 @@ int main_filter(int argc, char** argv){
 
         omp_set_num_threads(threads);
 
-        //#pragma omp single
+#pragma omp parallel
         {
-            for (auto r : read_files){
-            HASHTCounter htc(640000);
-            ifstream infile(r);
-            string line;
-            while (getline(infile, line))
+        #pragma omp single
             {
-                //#pragma omp task
-                {
-                    vector<string> tokens = split(line, '\t');
-                    for (int i = 2; i < tokens.size(); ++i){
-                        uint64_t h = stoull(tokens[i]);
-                        htc.increment((hash_t) h );
+                for (auto r : read_files){
+                    HASHTCounter htc(640000);
+                    KSEQ_Reader kt(r);
+                    int l = 0;
+                    ksequence_t seq;
+                    int num;
+                    while (l == 0){
+                        l = kt.get_next_buf(seq, num);
+                        #pragma omp task
+                        {
+                            for (int i = 0; 
+                        }
                     }
                 }
             }
-            htc.print();
         }
-        }
-        
+    
+        return 0;
     }
-
-    /**
-     * Counts kmers and outputs their counts in a map
-     * that can be used for streaming.
-     * Essentially, it's streaming main_hash
-     * main_count( int argc, char** argv){
-     *  
-     * }
-     */
-
 
     /**
      *
