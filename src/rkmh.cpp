@@ -2466,35 +2466,42 @@ int main_filter(int argc, char** argv){
         }
 
         omp_set_num_threads(threads);
+        HASHTCounter htc(640000);
+        //KSEQ_Reader* kt = new KSEQ_Reader();
+        //kt->buffer_size(bz);
 
-
+    /**#pragma omp parallel
     {
+    #pragma omp single
     {
                 for (auto r : read_files){
-                    HASHTCounter htc(640000);
-                    KSEQ_Reader kt(r);
-                    kt.buffer_size(bz);
-                    int l = 0;
-                    while (l == 0){
-                    {
-                        vector<string> seqs;
-                        l = kt.get_next_sequence_buffer(seqs);
-                            for (int i = 0; i < seqs.size(); ++i){
-                                    string s = seqs[i];
-                                    int l = seqs[i].size();
-                                    tuple<hash_t*, int> r = allhash_unsorted_64_fast(s.c_str(), l, kmer);
-                                    hash_t* h = std::get<0>(r);
-                                    int n = std::get<1>(r);
-                                    for (int i = 0; i < n; ++i){
-                                        htc.increment( *(h + i) );
-                                    }
-                                }
-                            }
+                    //int l = 0;
+                    //kt->open(r);
+                    //while (l == 0){
+                    //{
+                        //vector<string> seqs;
+                        //l = kt->get_next_sequence_buffer(seqs);
+                            //for (int i = 0; i < seqs.size(); ++i){
+                                    //#pragma omp task shared(seqs)
+                                    //{
+                                    //string s = seqs[i];
+                                    //int nums = seqs[i].size();
+                                    //tuple<hash_t*, int> r = allhash_unsorted_64_fast(s.c_str(), nums, kmer);
+                                    //hash_t* h = std::get<0>(r);
+                                    //int n = std::get<1>(r);
+                                    //for (int i = 0; i < n; ++i){
+                                        //htc.increment( *(h + i) );
+                                    //}
+                                    //}
+                                //}
+                            //}
 
-                    }
+                    //}
                 }
             }
     }
+    **/
+    //delete kt;
 
         return 0;
     }
