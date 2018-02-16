@@ -2427,7 +2427,10 @@ int main_filter(int argc, char** argv){
      */
     int main_count(int argc, char** argv){
         vector<char*> read_files;
+        vector<int> kmer;
         int threads = 1;
+
+        int bz = 1000;
 
         int c;
         int optind = 2;
@@ -2441,14 +2444,14 @@ int main_filter(int argc, char** argv){
             static struct option long_options[] =
             {
                 {"help", no_argument, 0, 'h'},
-                {"infile", required_argument, 0, 'i'},
+                {"fasta", required_argument, 0, 'f'},
                 {"threads", required_argument, 0, 't'},
                 {0,0,0,0}
             };
 
             int option_index = 0;
 
-            c = getopt_long(argc, argv, "ti:h", long_options, &option_index);
+            c = getopt_long(argc, argv, "k:tf:h", long_options, &option_index);
             if (c == -1){
                 break;
             }
@@ -2457,7 +2460,10 @@ int main_filter(int argc, char** argv){
                 case 't':
                     threads = atoi(optarg);
                     break;
-                case 'i':
+                case 'k':
+                    kmer.push_back(stoi(optarg));
+                    break;
+                case 'f':
                     read_files.push_back(optarg);
                     break;
                 case '?':
@@ -2474,27 +2480,35 @@ int main_filter(int argc, char** argv){
 
         omp_set_num_threads(threads);
 
-#pragma omp parallel
-        {
-        #pragma omp single
-            {
+
+    {
+    {
                 for (auto r : read_files){
                     HASHTCounter htc(640000);
                     KSEQ_Reader kt(r);
+                    kt.buffer_size(bz);
                     int l = 0;
-                    ksequence_t seq;
-                    int num;
                     while (l == 0){
-                        l = kt.get_next_buf(seq, num);
-                        #pragma omp task
-                        {
-                            for (int i = 0; 
-                        }
+                    {
+                        vector<string> seqs;
+                        l = kt.get_next_sequence_buffer(seqs);
+                            for (int i = 0; i < seqs.size(); ++i){
+                                    string s = seqs[i];
+                                    int l = seqs[i].size();
+                                    tuple<hash_t*, int> r = allhash_unsorted_64_fast(s.c_str(), l, kmer);
+                                    hash_t* h = std::get<0>(r);
+                                    int n = std::get<1>(r);
+                                    for (int i = 0; i < n; ++i){
+                                        htc.increment( *(h + i) );
+                                    }
+                                }
+                            }
+
                     }
                 }
             }
-        }
-    
+    }
+
         return 0;
     }
 

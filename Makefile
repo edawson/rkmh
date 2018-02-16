@@ -23,7 +23,7 @@ rkmh: $(SRC_DIR)/rkmh.o $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a $(SRC_DIR)/HASHTCoun
 $(SRC_DIR)/rkmh.o: $(SRC_DIR)/rkmh.cpp $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a $(SRC_DIR)/HASHTCounter.o
 	$(CXX) $(CXXFLAGS) -c -o $@ $< $(LD_INC_FLAGS) $(LD_LIB_FLAGS)
 
-libksr.a:
+libksr.a: kseq_reader/kseq_reader.cpp kseq_reader.hpp
 	cd kseq_reader && $(MAKE) && cp libksr.a ../ && cp *.hpp ../
 
 mkmh/libmkmh.a: mkmh/mkmh.cpp mkmh/mkmh.hpp

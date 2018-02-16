@@ -46,6 +46,14 @@ namespace HTC{
         //cout << (++counts [ key % my_size ]) << endl;
         #pragma omp atomic update
         ++(counts[ key % (uint64_t) my_size ]);
+       /** #pragma omp critical
+       {
+            uint64_t k = key % (uint64_t) my_size;
+            int v;
+            v = *(counts + (int) k);
+            v += 1;
+            *(counts + (int) k)  = v;
+        } */
     }
 
     int& HASHTCounter::get(htc_type key){
