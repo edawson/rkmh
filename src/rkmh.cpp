@@ -2438,7 +2438,7 @@ int main_filter(int argc, char** argv){
 
             int option_index = 0;
 
-            c = getopt_long(argc, argv, "k:tf:h", long_options, &option_index);
+            c = getopt_long(argc, argv, "k:t:f:h", long_options, &option_index);
             if (c == -1){
                 break;
             }
@@ -2467,41 +2467,43 @@ int main_filter(int argc, char** argv){
 
         omp_set_num_threads(threads);
         HASHTCounter htc(640000);
-        //KSEQ_Reader* kt = new KSEQ_Reader();
-        //kt->buffer_size(bz);
+        KSEQ_Reader* kt = new KSEQ_Reader();
+        kt->buffer_size(bz);
 
-    /**#pragma omp parallel
+    #pragma omp parallel shared(kt, htc)
     {
     #pragma omp single
     {
-                for (auto r : read_files){
-                    //int l = 0;
-                    //kt->open(r);
-                    //while (l == 0){
-                    //{
-                        //vector<string> seqs;
-                        //l = kt->get_next_sequence_buffer(seqs);
-                            //for (int i = 0; i < seqs.size(); ++i){
-                                    //#pragma omp task shared(seqs)
-                                    //{
-                                    //string s = seqs[i];
-                                    //int nums = seqs[i].size();
-                                    //tuple<hash_t*, int> r = allhash_unsorted_64_fast(s.c_str(), nums, kmer);
-                                    //hash_t* h = std::get<0>(r);
-                                    //int n = std::get<1>(r);
-                                    //for (int i = 0; i < n; ++i){
-                                        //htc.increment( *(h + i) );
-                                    //}
-                                    //}
-                                //}
-                            //}
-
-                    //}
+                for (int fi_ind = 0; fi_ind < read_files.size(); fi_ind++){
+                    int l = 0;
+                    kt->open(read_files[fi_ind]);
+                    while (l == 0){
+                    {
+                        ksequence_t* kst;
+                        int num;
+                        l = kt->get_next_buff(kst, num);
+                        for (int i = 0; i < num; ++i){
+                            char* s = (kst + i)->sequence;
+                            int length = (kst + i)->length;
+                            #pragma omp task
+                            {
+                                tuple<hash_t*, int> hashes = allhash_unsorted_64_fast((const char*) s, length, kmer);
+                                hash_t* hh = std::get<0>(hashes);
+                                int tt = std::get<1>(hashes);
+                                for (int h_ind = 0; h_ind < tt; ++h_ind){
+                                    htc.increment( *(hh + h_ind) );
+                                }
+                            }
+                            
+                        }
+                                                           
+                    }
                 }
             }
     }
-    **/
-    //delete kt;
+    }
+    
+    delete kt;
 
         return 0;
     }
