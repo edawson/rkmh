@@ -11,7 +11,7 @@
 
 namespace HTC{
     typedef uint64_t htc_type;
-class HASHTCounter{
+    class HASHTCounter{
 
     public:
         HASHTCounter();

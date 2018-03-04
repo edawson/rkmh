@@ -3,7 +3,8 @@
 #include <algorithm>
 #include <functional>
 #include <vector>
-#include<set>
+#include <set>
+#include <unordered_set>
 #include <cstdint>
 #include <string>
 #include <list>
@@ -2237,6 +2238,16 @@ int main_filter(int argc, char** argv){
         // read in a chunk of fastq reads
         // hash those reads
         // output said reads
+        
+        if (threads > 1){
+            #pragma omp parallel
+            {
+                #pragma omp single
+                {
+                    
+                }
+            }
+        }
 
         
         HASHTCounter read_counter(6400000000);
@@ -2294,7 +2305,7 @@ int main_filter(int argc, char** argv){
         // These are fastqs/fastas
         vector<char*> read_files;
 
-        int bufsz = 500;
+        int bufsz = 1000;
 
         string summary_file_suffix = "rkmh.summary.txt";
 
@@ -2352,53 +2363,71 @@ int main_filter(int argc, char** argv){
             }
         }
 
-        std::map<string, HASHTCounter*> ref_to_ht;
+        std::unordered_set<string> refs;
+    
+        HASHTCounter htc;
         for (auto r : ref_files){
             ifstream infile(r);
             string line;
             while(getline(infile, line)){
-                vector<string> tokens = split(line, '\t');
-                HASHTCounter* refhtc = new HASHTCounter(65000);
-                ref_to_ht[tokens[0]] = refhtc;
-                for (int i = 2; i < tokens.size(); ++i){
-                    ref_to_ht[tokens[0]]->increment((hash_t) stoull(tokens[i]));
-                }
+                vector<string> tokens = split(line, ' ');
+                //hash_t h = calc_hash(tokens[0]);
+                //htc.increment(h);
+                refs.insert(tokens[0]);
             }
         }
 
         
-
+        #pragma omp parallel
+        {
+#pragma omp single
+            {
         for (auto f : read_files){
             KSEQ_Reader kh;
             kh.open(f);
             kh.buffer_size(bufsz);
             ksequence_t* buf;
             int buflen;
-            int l = kh.get_next_buff(buf, buflen);
+            int l = 0;
+            stringstream seqstr;
             while (l == 0){
+                l= kh.get_next_buff(buf, buflen);
                 // Iterate over a buffer of sequences
                 for (int i = 0; i < buflen; ++i){
-                    stringstream seqstr;
+#pragma omp task shared(buf, buflen, seqstr, refs)
+                {
+                    vector<char*> foundmers;
                     seqstr << (buf + i)->name << "\t";
                     int seqlen = (buf + i)->length;
-                    tuple<hash_t*, int> hashes = allhash_unsorted_64_fast((buf + i)->sequence, seqlen, kmer);
-                    hash_t* start = std::get<0>(hashes);
-                    int num = std::get<1>(hashes);
-                    for (map<string, HASHTCounter*>::iterator it = ref_to_ht.begin();
-                    it != ref_to_ht.end();
-                    it++){
-                        int intersection = 0;
-                        for (int j = 0; j < num; j++){
-                            if (it->second->get( *(start + j) ) > 0){
-                                intersection++;
-                            }
+                    to_upper((buf + i)->sequence, seqlen);
+
+                    mkmh_kmer_list_t kmers = kmerize((buf + i)->sequence, seqlen, kmer[0]);
+                    if (kmers.length > 0){
+                    for (int j = 0; j < kmers.length; ++j){
+                        //if (htc.get(*(start + j) > 0)){
+                            if(refs.count(kmers.kmers[j])){
+                            //seqstr << kmers.kmers[i] << ",";
+                            foundmers.push_back(kmers.kmers[j]);
                         }
-                        cout << it->first << ":" << intersection << "/" << "NA" << endl;
                     }
+                    }
+                    for (int j = 0; j < foundmers.size(); ++j){
+                        seqstr << foundmers[j];
+                        if (j < foundmers.size() - 1){
+                            seqstr << ",";
+                        }
+                    }
+                    seqstr << "\n";
+                    cout << seqstr.str();
+                    seqstr.str("");
                 }
-             l= kh.get_next_buff(buf, buflen);           
+                }
             }
         }
+
+        }
+            }
+
         return 0;
     }
 
