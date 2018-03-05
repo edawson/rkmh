@@ -300,9 +300,10 @@ void hash_sequences(vector<string>& keys,
 
 #pragma omp parallel for
     for (int i = 0; i < keys.size(); i++){
-        tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(name_to_seq[keys[i]], name_to_length[keys[i]], kmer);
-        ret_to_hashes[keys[i]] = std::get<0>(hashes_and_num);
-        ret_to_hash_num[keys[i]] = std::get<1>(hashes_and_num);
+            
+        vector<hash_t> r = calc_hashes(name_to_seq[keys[i]], name_to_length[keys[i]], kmer);
+        ret_to_hashes[keys[i]] = &(*r.begin());
+        ret_to_hash_num[keys[i]] = r.size();
     }
 
 }
@@ -322,9 +323,9 @@ void hash_sequences(vector<string>& keys,
 #pragma omp parallel for
         for (int i = 0; i < keys.size(); i++){
             // Hash sequence
-            tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seqs[i], lengths[i], kmer);
-            hashes[i] = std::get<0>(hashes_and_num);
-            hash_lengths[i] = std::get<1>(hashes_and_num);
+            vector<hash_t> r = calc_hashes(seqs[i], lengths[i], kmer);
+            hashes[i] = &(*r.begin());
+            hash_lengths[i] = r.size();
             // TODO this is awful. There has to be a safe way around it.
             //#pragma omp critical
             {
@@ -340,9 +341,9 @@ void hash_sequences(vector<string>& keys,
     else if (doReferenceDepth){
 #pragma omp parallel for
         for (int i = 0; i < keys.size(); i++){
-            tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seqs[i], lengths[i], kmer);
-            hashes[i] = std::get<0>(hashes_and_num);
-            hash_lengths[i] = std::get<1>(hashes_and_num);
+            vector<hash_t> r = calc_hashes(seqs[i], lengths[i], kmer);
+            hashes[i] = &(*r.begin());
+            hash_lengths[i] = r.size();
 
             // create the set of hashes in the sample
             set<hash_t> sample_set (hashes[i], hashes[i] + hash_lengths[i]);
@@ -360,9 +361,9 @@ void hash_sequences(vector<string>& keys,
     else{
 #pragma omp parallel for
         for (int i = 0; i < keys.size(); i++){
-            tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seqs[i], lengths[i], kmer);
-            hashes[i] = std::get<0>(hashes_and_num);
-            hash_lengths[i] = std::get<1>(hashes_and_num);
+            vector<hash_t> r = calc_hashes(seqs[i], lengths[i], kmer);
+            hashes[i] =&(*r.begin());
+            hash_lengths[i] = r.size();
         }
 
     }
@@ -389,9 +390,9 @@ void hash_sequences(vector<string>& keys,
 #pragma omp parallel for
         for (int i = 0; i < keys.size(); i++){
             // Hash sequence
-            tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seqs[i], lengths[i], kmer);
-            hashes[i] = std::get<0>(hashes_and_num);
-            hash_lengths[i] = std::get<1>(hashes_and_num);
+            vector<hash_t> r = calc_hashes(seqs[i], lengths[i], kmer);
+            hashes[i] = &(*r.begin());
+            hash_lengths[i] = r.size();
             // TODO this is awful. There has to be a safe way around it.
             {
                 for (int j = 0; j < hash_lengths[i]; j++){
@@ -404,9 +405,9 @@ void hash_sequences(vector<string>& keys,
     else if (doReferenceDepth){
 #pragma omp parallel for
         for (int i = 0; i < keys.size(); i++){
-            tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seqs[i], lengths[i], kmer);
-            hashes[i] = std::get<0>(hashes_and_num);
-            hash_lengths[i] = std::get<1>(hashes_and_num);
+            vector<hash_t> r = calc_hashes(seqs[i], lengths[i], kmer);
+            hashes[i] = &(*r.begin());
+            hash_lengths[i] = r.size();
 
             // create the set of hashes in the sample
             set<hash_t> sample_set (hashes[i], hashes[i] + hash_lengths[i]);
@@ -423,9 +424,9 @@ void hash_sequences(vector<string>& keys,
     else{
 #pragma omp parallel for
         for (int i = 0; i < keys.size(); i++){
-            tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seqs[i], lengths[i], kmer);
-            hashes[i] = std::get<0>(hashes_and_num);
-            hash_lengths[i] = std::get<1>(hashes_and_num);
+            vector<hash_t> r = calc_hashes(seqs[i], lengths[i], kmer);
+            hashes[i] = &(*r.begin());
+            hash_lengths[i] = r.size();
         }
 
     }
@@ -993,11 +994,10 @@ int main_stream(int argc, char** argv){
                 int len = seq->seq.l;
 
                 // hash me
-                tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
+                vector<hash_t> r = calc_hashes(seq->seq.s, len, kmer);
+                hash_t* hashes = &(*r.begin());
+                int hashlen = r.size();
                 stringstream outre;
-
-                hash_t* hashes = std::get<0>(hashes_and_num);
-                int hashlen = std::get<1>(hashes_and_num);
 
                 std::sort(hashes, hashes + hashlen);
                 // and then just sketch me
@@ -1429,11 +1429,13 @@ int main_filter(int argc, char** argv){
             int len = seq->seq.l;
 
             // hash me
-            tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
+            vector<hash_t> r = calc_hashes(seq->seq.s, len, kmer);
+            hash_t* hashes = &(*r.begin());
+            int hashlen = r.size();
+ 
+            
+            //tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
             stringstream outre;
-
-            hash_t* hashes = std::get<0>(hashes_and_num);
-            int hashlen = std::get<1>(hashes_and_num);
 
             std::sort(hashes, hashes + hashlen);
             // and then just sketch me
@@ -1514,11 +1516,11 @@ int main_filter(int argc, char** argv){
 
 #pragma omp task_async
                     {
-                        tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
-                        stringstream outre;
+                        vector<hash_t> r = calc_hashes(seq->seq.s, len, kmer);
+                        hash_t* hashes = &(*r.begin());
+                        int hashlen = r.size();
 
-                        hash_t* hashes = std::get<0>(hashes_and_num);
-                        int hashlen = std::get<1>(hashes_and_num);
+                        stringstream outre;
 
                         std::sort(hashes, hashes + hashlen);
                         // and then just sketch me
@@ -2264,12 +2266,11 @@ int main_filter(int argc, char** argv){
             int len = seq->seq.l;
             cout << seq->name.s << "\t";
             if (!output_kmers){
-                tuple<hash_t*, int> r = allhash_unsorted_64_fast(x, len, kmer);
+                //tuple<hash_t*, int> r = allhash_unsorted_64_fast(x, len, kmer);
+                vector<hash_t> r = calc_hashes(x, len, kmer);
                 
-                int nhash = std::get<1>(r);
-                hash_t* hashes = std::get<0>(r);
-                for (int j = 0; j < nhash; ++j){
-                    cout << "\t" << *(hashes + j);
+                for (int j = 0; j < r.size(); ++j){
+                    cout << "\t" << r[j];
                 }
                 cout << endl;
             }
@@ -2516,11 +2517,9 @@ int main_filter(int argc, char** argv){
                             int length = (kst + i)->length;
                             #pragma omp task
                             {
-                                tuple<hash_t*, int> hashes = allhash_unsorted_64_fast((const char*) s, length, kmer);
-                                hash_t* hh = std::get<0>(hashes);
-                                int tt = std::get<1>(hashes);
-                                for (int h_ind = 0; h_ind < tt; ++h_ind){
-                                    htc.increment( *(hh + h_ind) );
+                                vector<hash_t> hashes = calc_hashes((const char*) s, length, kmer);
+                                for (int h_ind = 0; h_ind < hashes.size(); ++h_ind){
+                                    htc.increment(hashes[h_ind]);
                                 }
                             }
                             
