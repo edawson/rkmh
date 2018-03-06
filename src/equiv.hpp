@@ -16,7 +16,6 @@
 
 using namespace std;
 using namespace mkmh;
-using namespace HTC;
 
 struct c_comp{
     bool operator() (const hash_t& lhs, const hash_t& rhs) const {return lhs < rhs;};
