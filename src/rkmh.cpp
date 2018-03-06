@@ -733,9 +733,9 @@ int main_stream(int argc, char** argv){
 
     omp_set_num_threads(threads);
     // Read in depth map for reads and refs if provided
-    HASHTCounter read_hash_counter(200000000);
-    HASHTCounter ref_hash_counter(200000000);
-    if (!read_kmer_map_file.empty()){
+    HASHTCounter* read_hash_counter = new HASHTCounter(200000000);
+    HASHTCounter* ref_hash_counter = new HASHTCounter(200000000);
+    /**if (!read_kmer_map_file.empty()){
         ifstream ifi(read_kmer_map_file);
         string xline;
         int xsz = 0;
@@ -760,7 +760,7 @@ int main_stream(int argc, char** argv){
     }
     if (!pre_ref_files.empty()){
 
-    }
+    }**/
 
     vector<string> ref_keys;
     vector<char*> ref_seqs;
@@ -791,17 +791,30 @@ int main_stream(int argc, char** argv){
             ref_keys.push_back(string(seq->name.s));
             hash_t* h;
             int hashnum;
-            calc_hashes(seq->seq.s, seq->seq.l, kmer, h, hashnum);
-            ref_hash_counter.bulk_increment(h, hashnum);
-            ref_hashes.push_back(h);
-            ref_hash_lens.push_back(hashnum);
+            calc_hashes(seq->seq.s, seq->seq.l, kmer, h, hashnum, ref_hash_counter);
+            hash_t* mins;
+            int min_num;
+            minhashes(h, hashnum, sketch_size, mins, min_num);
+            ref_hashes.push_back(mins);
+            ref_hash_lens.push_back(min_num);
             delete [] h;
         }
     }
-    // Now that we have hashes and a HASHTCounter,
-    // we can make MinHash sketches for our input sequences.
-    for (int i = 0; i < ref_keys.size(); ++i){
-    }
+
+
+            for (auto r : read_files){
+                fp = gzopen(r, "r");
+                seq = kseq_init(fp);
+                int l = 0;
+                while ((l =kseq_read(seq)) >= 0){
+                    {
+                        hash_t* h;
+                        int hashnum;
+                        calc_hashes(seq->seq.s, seq->seq.l, kmer, h, hashnum, read_hash_counter);
+                    }
+                }
+            }
+
 
     // Take in a quartet of lines from STDIN (FASTQ format??)
     // or perhaps just individual read sequences and names (or give them names dynamically
