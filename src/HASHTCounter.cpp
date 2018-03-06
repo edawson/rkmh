@@ -56,6 +56,12 @@ namespace HTC{
         } */
     }
 
+    void HASHTCounter::bulk_increment(htc_type* h, int num){
+        for (int i = 0; i < num; ++i){
+            this->increment( *(h + i) );
+        }
+    }
+
     int& HASHTCounter::get(htc_type key){
         return (counts[ key % (uint64_t) my_size ]);
     }

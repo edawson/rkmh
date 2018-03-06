@@ -20,6 +20,8 @@ namespace HTC{
         int& operator[](htc_type key);
 
         void increment(htc_type key);
+        void bulk_increment(htc_type* h, int num);
+
         int& get(htc_type key);
 
         void get(htc_type key, int& ret);
