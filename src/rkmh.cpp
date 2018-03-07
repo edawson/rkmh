@@ -846,7 +846,7 @@ int main_stream(int argc, char** argv){
                 int max_id = -1;
                 for (int j = 0; j < numrefs; ++j){
                     int shared = 0;
-                    hash_intersection_size(h, num, ref_hashes[j], ref_hash_lens[j], shared);
+                    hash_set_intersection_size(h, num, ref_hashes[j], ref_hash_lens[j], shared);
                     if (shared > max_shared){
                         max_shared = shared;
                         max_id = j;
@@ -854,7 +854,7 @@ int main_stream(int argc, char** argv){
                 }
 
                 stringstream outre;
-                outre << read_keys[i] << "\t" << ref_keys[max_id] << "\t" << max_shared << "\t" << sketch_size << endl;
+                outre << ref_keys[max_id] << "\t" << read_keys[i]  <<  "\t" << max_shared << "\t" << sketch_size << endl;
                 cout << outre.str();
                 outre.str("");
             }
