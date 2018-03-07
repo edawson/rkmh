@@ -800,6 +800,7 @@ int main_stream(int argc, char** argv){
         if (!doReferenceDepth){
             #pragma omp for
             for (int i = 0; i < numrefs; ++i){
+                to_upper(ref_seqs[i], ref_lens[i]);
                 hash_t* h;
                 int num;
                 calc_hashes(ref_seqs[i], ref_lens[i], kmer, h, num);
@@ -833,6 +834,8 @@ int main_stream(int argc, char** argv){
         if (!doReadDepth && !stream_files){
             #pragma omp for
             for (int i = 0; i < numreads; ++i){
+                to_upper(read_seqs[i], read_lens[i]);
+
                 hash_t* h;
                 int num;
                 calc_hashes(read_seqs[i], read_lens[i], kmer, h, num);
