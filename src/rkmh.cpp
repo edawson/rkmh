@@ -733,8 +733,14 @@ int main_stream(int argc, char** argv){
 
     omp_set_num_threads(threads);
     // Read in depth map for reads and refs if provided
-    HASHTCounter* read_hash_counter = new HASHTCounter(200000000);
-    HASHTCounter* ref_hash_counter = new HASHTCounter(200000000);
+    HASHTCounter* read_hash_counter;
+    HASHTCounter* ref_hash_counter;
+    if (doReadDepth){
+       read_hash_counter  = new HASHTCounter(200000000);
+    }
+    if (doReferenceDepth){
+        ref_hash_counter = new HASHTCounter(200000000);
+    }
     /**if (!read_kmer_map_file.empty()){
         ifstream ifi(read_kmer_map_file);
         string xline;
@@ -765,57 +771,104 @@ int main_stream(int argc, char** argv){
     vector<string> ref_keys;
     vector<char*> ref_seqs;
     vector<int> ref_lens;
-    
-    
-    vector<hash_t*> ref_hashes;
-    vector<int> ref_hash_lens;
 
-    vector<string> read_keys;
+     vector<string> read_keys;
     vector<char*> read_seqs;
     vector<int> read_lens;
 
-    // Read in our reference files
-    // and calculate the hashes for each reference.
-    // Store this and the number of hashes per reference.
-    //
-    // Right now this is optimized to use as little RAM
-    // as possible, not to maximize speed.
     
-    gzFile fp;  
-    kseq_t *seq; 
-    for (auto r : ref_files){
-        fp = gzopen(r, "r");
-        seq = kseq_init(fp);
-        int l = 0;
-        while ((l = kseq_read(seq)) >= 0) {
-            ref_keys.push_back(string(seq->name.s));
-            hash_t* h;
-            int hashnum;
-            calc_hashes(seq->seq.s, seq->seq.l, kmer, h, hashnum, ref_hash_counter);
-            hash_t* mins;
-            int min_num;
-            minhashes(h, hashnum, sketch_size, mins, min_num);
-            ref_hashes.push_back(mins);
-            ref_hash_lens.push_back(min_num);
-            delete [] h;
-        }
+ 
+    bool stream_files = false;
+
+    if (!ref_files.empty()){
+        parse_fastas(ref_files, ref_keys, ref_seqs, ref_lens);
     }
+    if (!read_files.empty() && !stream_files){
+        parse_fastas(read_files, read_keys, read_seqs, read_lens);
+    }
+    
+    hash_t** ref_hashes = new hash_t*[ref_keys.size()];
+    vector<int> ref_hash_lens(ref_keys.size());
 
 
-            for (auto r : read_files){
-                fp = gzopen(r, "r");
-                seq = kseq_init(fp);
-                int l = 0;
-                while ((l =kseq_read(seq)) >= 0){
-                    {
-                        hash_t* h;
-                        int hashnum;
-                        calc_hashes(seq->seq.s, seq->seq.l, kmer, h, hashnum, read_hash_counter);
-                    }
-                }
+   
+    int numrefs = ref_keys.size();
+    int numreads = read_keys.size();
+    #pragma omp parallel
+    {
+
+        if (!doReferenceDepth){
+            #pragma omp for
+            for (int i = 0; i < numrefs; ++i){
+                hash_t* h;
+                int num;
+                calc_hashes(ref_seqs[i], ref_lens[i], kmer, h, num);
+                minhashes(h, num, sketch_size, ref_hashes[i], ref_hash_lens[i]);
             }
 
+        }
+        else{
+            #pragma omp for
+            for (int i = 0; i < numrefs; ++i){
+                hash_t* h;
+                int num;
+                calc_hashes(ref_seqs[i], ref_lens[i], kmer, h, num, ref_hash_counter);
+                minhashes_min_occurrence_filter(h, num, sketch_size, ref_hashes[i], ref_hash_lens[i], ref_hash_counter);
+            }
+        }
+        
+        /**
+         * for (int i = 0; i < ref_keys.size(); i++){
+            cout << ref_hash_lens[i] << endl;
+            for (int j = 0; j < ref_hash_lens[i]; j++){
+                cout << "\t" << ref_hashes[i][j];
+            }
+            cout << endl;
+            exit(1);
+        }
 
+        **/
+        
+
+        if (!doReadDepth && !stream_files){
+            #pragma omp for
+            for (int i = 0; i < numreads; ++i){
+                hash_t* h;
+                int num;
+                calc_hashes(read_seqs[i], read_lens[i], kmer, h, num);
+                hash_t* mins;
+                int min_num;
+                minhashes(h, num, sketch_size, mins, min_num);
+                int max_shared = -1;
+                int max_id = -1;
+                for (int j = 0; j < numrefs; ++j){
+                    int shared = 0;
+                    hash_intersection_size(h, num, ref_hashes[j], ref_hash_lens[j], shared);
+                    if (shared > max_shared){
+                        max_shared = shared;
+                        max_id = j;
+                    }
+                }
+
+                stringstream outre;
+                outre << read_keys[i] << "\t" << ref_keys[max_id] << "\t" << max_shared << "\t" << sketch_size << endl;
+                cout << outre.str();
+                outre.str("");
+            }
+        }
+        else if (doReadDepth && !stream_files){
+
+        }
+        else if (!doReadDepth && stream_files){
+
+        }
+        else{
+
+        }
+
+    }
+    
+    
     // Take in a quartet of lines from STDIN (FASTQ format??)
     // or perhaps just individual read sequences and names (or give them names dynamically
     // hash them, possibly with kmer depth filtering,
@@ -1992,18 +2045,8 @@ int main_filter(int argc, char** argv){
         // hash those reads
         // output said reads
 
-        if (threads > 1){
-#pragma omp parallel
-            {
-#pragma omp single
-                {
-
-                }
-            }
-        }
 
 
-        HASHTCounter read_counter(6400000000);
         kseq_t *seq;
         char* f = read_files[0];
         gzFile fp;
