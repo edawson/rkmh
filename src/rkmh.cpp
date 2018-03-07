@@ -840,7 +840,9 @@ int main_stream(int argc, char** argv){
                     int shared = 0;
                     hash_set_intersection_size(h, num, ref_minhashes[j], ref_min_lens[j], shared);
                     if (shared > max_shared){
+                        //#pragma omp atomic write
                         max_shared = shared;
+                        //#pragma omp atomic write
                         max_id = j;
                     }
                 }
@@ -1914,8 +1916,7 @@ int main_filter(int argc, char** argv){
      * TODO: streaming kmer counting
      */
     int main_hash(int argc, char** argv){
-        vector<char*> ref_files;
-        vector<char*> read_files;
+        vector<char*> input_files;
 
 
         vector<int> kmer;
@@ -1987,11 +1988,8 @@ int main_filter(int argc, char** argv){
                 case 't':
                     threads = atoi(optarg);
                     break;
-                case 'r':
-                    ref_files.push_back(optarg);
-                    break;
                 case 'f':
-                    read_files.push_back(optarg);
+                    input_files.push_back(optarg);
                     break;
                 case 'k':
                     kmer.push_back(atoi(optarg));
@@ -2033,53 +2031,76 @@ int main_filter(int argc, char** argv){
             kmer.push_back(16);
         }
 
+        bool use_freqs = (doReferenceDepth || doReadDepth);
+
         omp_set_num_threads(threads);
+
+        int bufsz = 1000;
 
         // In parallel
         // read in a chunk of fastq reads
         // hash those reads
         // output said reads
+        
+        #pragma omp parallel
+        {
+        
+            #pragma omp single
+            {
+                if (output_kmers){
+                    char* f = input_files[0];
+                    KSEQ_Reader ksr;
+                    ksr.buffer_size(bufsz);
+                    ksr.open(f);
 
-
-
-        kseq_t *seq;
-        char* f = read_files[0];
-        gzFile fp;
-        int l;
-        fp = gzopen(f, "r");
-        seq = kseq_init(fp);
-        while ((l = kseq_read(seq)) >= 0) {
-            to_upper(seq->seq.s, seq->seq.l);
-            char * x = new char[seq->seq.l];
-            memcpy(x, seq->seq.s, seq->seq.l);
-            int len = seq->seq.l;
-            cout << seq->name.s << "\t";
-            if (!output_kmers){
-                //tuple<hash_t*, int> r = allhash_unsorted_64_fast(x, len, kmer);
-                vector<hash_t> r = calc_hashes(x, len, kmer);
-
-                for (int j = 0; j < r.size(); ++j){
-                    cout << "\t" << r[j];
+                    int l = 0;
+                    ksequence_t* kt;
+                    int num;
+                    while (l == 0){
+                        l = ksr.get_next_buffer(kt, num);
+                        //#pragma omp for
+                        for (int i = 0; i < num; ++i){
+                            #pragma omp task 
+                            {
+                                print_kmers(kt[i].sequence, kt[i].length, kmer[0], kt[i].name); 
+                            }
+                        }
+                    }
+                    #pragma omp taskwait
                 }
-                cout << endl;
-            }
-            else{
-                // mkmh_kmer_list_t kl = kmerize(x, len, kmer[0]);
-                // for (int i = 0; i < kl.length; ++i){
-                //     cout << "\t" << *(kl.kmers + i);
-                // }
-                // cout << endl;
-                print_kmers(x, len, kmer[0]);
-                cout << endl;
-            }
+                else if (!use_freqs){
+                    char* f = input_files[0];
+                    KSEQ_Reader ksr;
+                    ksr.buffer_size(bufsz);
+                    ksr.open(f);
 
-            delete [] x;
-        } 
-        gzclose(fp);
-        kseq_destroy(seq);
+                    int l = 0;
+                    ksequence_t* kt;
+                    int num;
+                    while (l == 0){
+                        l = ksr.get_next_buffer(kt, num);
+                        //#pragma omp for
+                        for (int i = 0; i < num; ++i){
+                            #pragma omp task 
+                            {
+                                hash_t* h;
+                                int num;
+                                calc_hashes(kt[i].sequence, kt[i].length, kmer, h, num);
+                                print_hashes(h, num, kt[i].name);
+                                delete [] h;
+                            }
+                        }
+                    }
+                    #pragma omp taskwait
+                }
+                else{
+                
+                }
+            }
+        }
+
         return 0;
     }
-
 
     /**
      *  Search: take in a reference set of hashes and query
@@ -2181,7 +2202,7 @@ int main_filter(int argc, char** argv){
                     int l = 0;
                     stringstream seqstr;
                     while (l == 0){
-                        l= kh.get_next_buff(buf, buflen);
+                        l= kh.get_next_buffer(buf, buflen);
                         // Iterate over a buffer of sequences
                         for (int i = 0; i < buflen; ++i){
 #pragma omp task shared(buf, buflen, seqstr, refs)
@@ -2300,7 +2321,7 @@ int main_filter(int argc, char** argv){
                             {
                                 ksequence_t* kst;
                                 int num;
-                                l = kt->get_next_buff(kst, num);
+                                l = kt->get_next_buffer(kst, num);
                                 for (int i = 0; i < num; ++i){
                                     char* s = (kst + i)->sequence;
                                     int length = (kst + i)->length;
