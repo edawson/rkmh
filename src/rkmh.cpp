@@ -772,7 +772,7 @@ int main_stream(int argc, char** argv){
     vector<char*> ref_seqs;
     vector<int> ref_lens;
 
-     vector<string> read_keys;
+    vector<string> read_keys;
     vector<char*> read_seqs;
     vector<int> read_lens;
 
@@ -790,6 +790,8 @@ int main_stream(int argc, char** argv){
     hash_t** ref_hashes = new hash_t*[ref_keys.size()];
     vector<int> ref_hash_lens(ref_keys.size());
 
+    hash_t** ref_minhashes = new hash_t*[ref_keys.size()];
+    vector<int> ref_min_lens(ref_keys.size());
 
    
     int numrefs = ref_keys.size();
@@ -804,31 +806,21 @@ int main_stream(int argc, char** argv){
                 hash_t* h;
                 int num;
                 calc_hashes(ref_seqs[i], ref_lens[i], kmer, h, num);
-                minhashes(h, num, sketch_size, ref_hashes[i], ref_hash_lens[i]);
+                minhashes(h, num, sketch_size, ref_minhashes[i], ref_min_lens[i]);
             }
 
         }
         else{
             #pragma omp for
             for (int i = 0; i < numrefs; ++i){
-                hash_t* h;
-                int num;
-                calc_hashes(ref_seqs[i], ref_lens[i], kmer, h, num, ref_hash_counter);
-                minhashes_min_occurrence_filter(h, num, sketch_size, ref_hashes[i], ref_hash_lens[i], ref_hash_counter);
+                calc_hashes(ref_seqs[i], ref_lens[i], kmer, ref_hashes[i], ref_hash_lens[i], ref_hash_counter);
+            }
+            #pragma omp for
+            for (int i = 0; i < numrefs; ++i){
+                minhashes_frequency_filter(ref_hashes[i], ref_hash_lens[i], sketch_size,
+                 ref_minhashes[i], ref_min_lens[i], ref_hash_counter, 0, max_samples);
             }
         }
-        
-        /**
-         * for (int i = 0; i < ref_keys.size(); i++){
-            cout << ref_hash_lens[i] << endl;
-            for (int j = 0; j < ref_hash_lens[i]; j++){
-                cout << "\t" << ref_hashes[i][j];
-            }
-            cout << endl;
-            exit(1);
-        }
-
-        **/
         
 
         if (!doReadDepth && !stream_files){
@@ -846,7 +838,7 @@ int main_stream(int argc, char** argv){
                 int max_id = -1;
                 for (int j = 0; j < numrefs; ++j){
                     int shared = 0;
-                    hash_set_intersection_size(h, num, ref_hashes[j], ref_hash_lens[j], shared);
+                    hash_set_intersection_size(h, num, ref_minhashes[j], ref_min_lens[j], shared);
                     if (shared > max_shared){
                         max_shared = shared;
                         max_id = j;
