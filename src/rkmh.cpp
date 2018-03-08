@@ -791,6 +791,8 @@ int main_stream(int argc, char** argv){
     for (int i = 0; i < read_seqs.size(); ++i){
         rseqs[i] = read_seqs[i];
     }
+
+
     hash_t** ref_hashes = new hash_t*[ref_keys.size()];
     vector<int> ref_hash_lens(ref_keys.size());
 
@@ -807,10 +809,12 @@ int main_stream(int argc, char** argv){
             #pragma omp for
             for (int i = 0; i < numrefs; ++i){
                 to_upper(ref_seqs[i], ref_lens[i]);
-                hash_t* h;
+                //hash_t* h;
                 int num;
-                calc_hashes(ref_seqs[i], ref_lens[i], kmer, h, num);
-                minhashes(h, num, sketch_size, ref_minhashes[i], ref_min_lens[i]);
+                calc_hashes(ref_seqs[i], ref_lens[i], kmer, ref_hashes[i], num);
+                minhashes(ref_hashes[i], num, sketch_size, ref_minhashes[i], ref_min_lens[i]);
+                delete [] ref_hashes[i];
+                delete [] ref_seqs[i];
             }
 
         }
@@ -851,6 +855,7 @@ int main_stream(int argc, char** argv){
                 //#pragma omp task depend(in: h, num) depend(out: mins, min_num)
                 minhashes(h, num, sketch_size, mins, min_num);
                 delete [] h;
+                delete [] rseqs[i];
 
                 for (int j = 0; j < numrefs; ++j){
                     //#pragma omp task depend(in: mins, min_num) depend(out: shared_arr)
@@ -875,6 +880,7 @@ int main_stream(int argc, char** argv){
                     outre << ref_keys[max_id] << "\t" << read_keys[i]  <<  "\t" << (*max_shared_ptr) << "\t" << sketch_size << endl;
                     cout << outre.str();
                     outre.str("");
+                    delete [] mins;
 
                 }
            }
@@ -900,6 +906,8 @@ int main_stream(int argc, char** argv){
     // Thanks heavens for https://biowize.wordpress.com/2013/03/05/using-kseq-h-with-stdin/
     
     delete [] rseqs;
+    delete [] ref_hashes;
+    delete [] ref_minhashes;
 return 0;
 
 
