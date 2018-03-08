@@ -786,7 +786,11 @@ int main_stream(int argc, char** argv){
     if (!read_files.empty() && !stream_files){
         parse_fastas(read_files, read_keys, read_seqs, read_lens);
     }
-    
+
+    char** rseqs = new char*[read_seqs.size()];
+    for (int i = 0; i < read_seqs.size(); ++i){
+        rseqs[i] = read_seqs[i];
+    }
     hash_t** ref_hashes = new hash_t*[ref_keys.size()];
     vector<int> ref_hash_lens(ref_keys.size());
 
@@ -821,37 +825,62 @@ int main_stream(int argc, char** argv){
                  ref_minhashes[i], ref_min_lens[i], ref_hash_counter, 0, max_samples);
             }
         }
+    
         
 
         if (!doReadDepth && !stream_files){
+    //#pragma omp single
+    {
             #pragma omp for
             for (int i = 0; i < numreads; ++i){
-                to_upper(read_seqs[i], read_lens[i]);
 
+                int shared_arr [numrefs];
                 hash_t* h;
                 int num;
-                calc_hashes(read_seqs[i], read_lens[i], kmer, h, num);
                 hash_t* mins;
                 int min_num;
-                minhashes(h, num, sketch_size, mins, min_num);
-                int max_shared = -1;
-                int max_id = -1;
-                for (int j = 0; j < numrefs; ++j){
-                    int shared = 0;
-                    hash_set_intersection_size(h, num, ref_minhashes[j], ref_min_lens[j], shared);
-                    if (shared > max_shared){
-                        //#pragma omp atomic write
-                        max_shared = shared;
-                        //#pragma omp atomic write
-                        max_id = j;
-                    }
+
+                //#pragma omp task depend(out: rseqs[i])
+                {
+                    to_upper(rseqs[i], read_lens[i]);
                 }
 
-                stringstream outre;
-                outre << ref_keys[max_id] << "\t" << read_keys[i]  <<  "\t" << max_shared << "\t" << sketch_size << endl;
-                cout << outre.str();
-                outre.str("");
-            }
+                //#pragma omp task depend(in: rseqs[i]) depend(out: h, num)
+                calc_hashes(rseqs[i], read_lens[i], kmer, h, num);
+
+                //#pragma omp task depend(in: h, num) depend(out: mins, min_num)
+                minhashes(h, num, sketch_size, mins, min_num);
+                delete [] h;
+
+                for (int j = 0; j < numrefs; ++j){
+                    //#pragma omp task depend(in: mins, min_num) depend(out: shared_arr)
+                        hash_set_intersection_size(mins, min_num, ref_minhashes[j], ref_min_lens[j], shared_arr[j]);
+                }
+                //#pragma omp task depend(in: shared_arr)
+                {
+
+                    //int max_shared = -1;
+                    //int max_id = -1;
+                    //for (int j = 0; j < numrefs; ++j){
+                    //    if (shared_arr[j] max_shared
+                    //    max_shared = max_shared < shared_arr[j] ? shared_arr[j] : max_shared;
+                    //    max_id = max_shared < shared_arr[j] ? j : max_id;
+                    //}
+
+                    int* max_shared_ptr = std::max_element(shared_arr, shared_arr + numrefs);
+
+                    int max_id = std::distance(shared_arr, max_shared_ptr);
+
+                    stringstream outre;
+                    outre << ref_keys[max_id] << "\t" << read_keys[i]  <<  "\t" << (*max_shared_ptr) << "\t" << sketch_size << endl;
+                    cout << outre.str();
+                    outre.str("");
+
+                }
+           }
+
+        //#pragma omp taskwait
+    }
         }
         else if (doReadDepth && !stream_files){
 
@@ -862,16 +891,15 @@ int main_stream(int argc, char** argv){
         else{
 
         }
-
     }
-    
-    
     // Take in a quartet of lines from STDIN (FASTQ format??)
     // or perhaps just individual read sequences and names (or give them names dynamically
     // hash them, possibly with kmer depth filtering,
     // create a sketch, then classify and report the classification.
     //
     // Thanks heavens for https://biowize.wordpress.com/2013/03/05/using-kseq-h-with-stdin/
+    
+    delete [] rseqs;
 return 0;
 
 
