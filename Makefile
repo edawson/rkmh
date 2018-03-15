@@ -27,11 +27,12 @@ kseq_reader/libksr.a: kseq_reader/kseq_reader.cpp kseq_reader/kseq_reader.hpp
 	cd kseq_reader && $(MAKE)
 
 mkmh/libmkmh.a: mkmh/mkmh.cpp mkmh/mkmh.hpp
-	cd mkmh && $(MAKE) clean && $(MAKE)
+	cd mkmh && $(MAKE)
 
 .PHONY: clean clobber lib static
 
 clean:
 	$(RM) $(SRC_DIR)/*.o
 	cd mkmh && $(MAKE) clean
+	cd kseq_reader && $(MAKE) clean
 	$(RM) rkmh
