@@ -788,9 +788,16 @@ int main_stream(int argc, char** argv){
     }
 
     char** rseqs = new char*[read_seqs.size()];
+
     for (int i = 0; i < read_seqs.size(); ++i){
         rseqs[i] = read_seqs[i];
     }
+
+    hash_t** read_hashes = new hash_t*[read_keys.size()];
+    vector<int> read_hash_lens(read_keys.size());
+
+    hash_t** read_mins = new hash_t*[read_keys.size()];
+    vector<int> read_min_lens(read_keys.size());
 
 
     hash_t** ref_hashes = new hash_t*[ref_keys.size()];
@@ -802,9 +809,9 @@ int main_stream(int argc, char** argv){
    
     int numrefs = ref_keys.size();
     int numreads = read_keys.size();
+
     #pragma omp parallel
     {
-
         if (!doReferenceDepth){
             #pragma omp for
             for (int i = 0; i < numrefs; ++i){
@@ -889,10 +896,57 @@ int main_stream(int argc, char** argv){
     }
         }
         else if (doReadDepth && !stream_files){
+            #pragma omp for
+            for (int i = 0; i < numreads; ++i){
+                int shared_arr[numrefs];
 
+                to_upper(rseqs[i], read_lens[i]);
+                calc_hashes(rseqs[i], read_lens[i], kmer, read_hashes[i], read_hash_lens[i], read_hash_counter);
+            }
+            #pragma omp for
+            for (int i = 0; i < numreads; ++i){
+                hash_t* mins;
+                int num_mins;
+                int shared_arr[numrefs];
+                mask_by_frequency(read_hashes[i], read_hash_lens[i], read_hash_counter, min_kmer_occ);
+                minhashes(read_hashes[i], read_hash_lens[i], sketch_size, mins, num_mins);
+                delete [] read_hashes[i];
+                
+
+                for (int j = 0; j < numrefs; ++j){
+                        hash_set_intersection_size(mins, num_mins, ref_minhashes[j], ref_min_lens[j], shared_arr[j]);
+                }
+                int* max_shared_ptr = std::max_element(shared_arr, shared_arr + numrefs);
+
+                int max_id = std::distance(shared_arr, max_shared_ptr);
+
+                stringstream outre;
+                outre << ref_keys[max_id] << "\t" << read_keys[i]  <<  "\t" << (*max_shared_ptr) << "\t" << min(sketch_size, read_hash_lens[i]) << endl;
+                cout << outre.str();
+                outre.str("");
+                delete [] mins;
+            }
         }
         else if (!doReadDepth && stream_files){
-
+            KSEQ_Reader ksq;
+            int bufsz = 1000;
+            ksq.open(read_files[0]);
+            ksq.buffer_size(bufsz);
+            int l = 0;
+            while (l == 0){
+                ksequence_t* kt;
+                int rnum = 0;
+                l = ksq.get_next_buffer(kt, rnum);
+                #pragma omp for
+                for (int i = 0; i < rnum; ++i){
+                    hash_t* h;
+                    int hashnum;
+                    hash_t* mins;
+                    int minnum;
+                    calc_hashes(rseqs[i], read_lens[i], kmer, h, hashnum);
+                    minhashes(h, hashnum, sketch_size, mins, minnum);
+                }
+            }
         }
         else{
 
@@ -2218,9 +2272,9 @@ int main_filter(int argc, char** argv){
             string line;
             while(getline(infile, line)){
                 vector<string> tokens = split(line, ' ');
-                //hash_t h = calc_hash(tokens[0]);
-                //htc.increment(h);
-                refs.insert(tokens[0]);
+                hash_t h = calc_hash(tokens[0]);
+                htc.increment(h);
+                //refs.insert(tokens[0]);
             }
         }
 
@@ -2251,8 +2305,8 @@ int main_filter(int argc, char** argv){
                                 mkmh_kmer_list_t kmers = kmerize((buf + i)->sequence, seqlen, kmer[0]);
                                 if (kmers.length > 0){
                                     for (int j = 0; j < kmers.length; ++j){
-                                        //if (htc.get(*(start + j) > 0)){
-                                        if(refs.count(kmers.kmers[j])){
+                                        if (htc.get(kmers.kmers[j] > 0)){
+                                        //if(refs.count(kmers.kmers[j])){
                                             //seqstr << kmers.kmers[i] << ",";
                                             foundmers.push_back(kmers.kmers[j]);
                                         }
@@ -2381,6 +2435,313 @@ int main_filter(int argc, char** argv){
 
             return 0;
         }
+
+        // Performs a tiered MinHash / kmer-matching stratgy
+        // First removes any reads that aren't obivously HPV16
+        // Then performs exact matches at the lineage and sublineage level
+        // And returns the predicted sublineage.
+        int main_hpv16(int argc, char** argv){
+            vector<char*> read_files;
+
+            vector<char*> ref_files;
+
+            char* hpv_type_ref_file = "data/all_pave_ref.fa";
+            ref_files.push_back(hpv_type_ref_file);
+            char* sublin_type_ref_file = "data/new_refs.fa";
+
+            int sketch_size = 4000;
+            int threads = 1;
+            int min_kmer_occ = 0;
+            int min_matches = -1;
+            int min_diff = 0;
+
+            vector<int> kmer_sizes;
+            
+            int c;
+            int optind = 2;
+
+            if (argc <= 2){
+                help_classify(argv);
+                exit(1);
+            }
+
+            while (true){
+                static struct option long_options[] =
+                {
+                    {"help", no_argument, 0, 'h'},
+                    {"kmer", no_argument, 0, 'k'},
+                    {"fasta", required_argument, 0, 'f'},
+                    {"reference", required_argument, 0, 'r'},
+                    {"sketch", required_argument, 0, 's'},
+                    {"threads", required_argument, 0, 't'},
+                    {"min-kmer-occurence", required_argument, 0, 'M'},
+                    {"min-matches", required_argument, 0, 'N'},
+                    {"min-diff", required_argument, 0, 'D'},
+                    {"max-samples", required_argument, 0, 'I'},
+                    {0,0,0,0}
+                };
+
+                int option_index = 0;
+                c = getopt_long(argc, argv, "hk:f:r:s:t:M:N:D:", long_options, &option_index);
+                if (c == -1){
+                    break;
+                }
+
+                switch (c){
+                    case 't':
+                        threads = atoi(optarg);
+                        break;
+                    case 'f':
+                        read_files.push_back(optarg);
+                        break;
+                    case 'k':
+                        kmer_sizes.push_back(atoi(optarg));
+                        break;
+                    case '?':
+                    case 'h':
+                        print_help(argv);
+                        exit(1);
+                        break;
+                    case 's':
+                        sketch_size = atoi(optarg);
+                        break;
+                    case 'M':
+                        min_kmer_occ = atoi(optarg);
+                        break;
+                    case 'N':
+                        min_matches = atoi(optarg);
+                        break;
+                    case 'D':
+                        min_diff = atoi(optarg);
+                        break;
+                    default:
+                        print_help(argv);
+                        abort();
+
+                }
+            }
+
+    vector<string> type_keys;
+    vector<char*> type_seqs;
+    vector<int> type_lens;
+
+    vector<string> subtype_keys;
+    vector<char*> subtype_seqs;
+    vector<int> subtype_lens;
+
+
+    
+    if (!ref_files.empty()){
+        parse_fastas(ref_files, type_keys, type_seqs, type_lens);
+    }
+
+    vector<char*> rfi;
+    rfi.push_back(sublin_type_ref_file);
+    parse_fastas(rfi, subtype_keys, subtype_seqs, subtype_lens);
+    int n_subtypes = subtype_keys.size();
+    hash_t** subtype_hashes = new hash_t*[subtype_keys.size()];
+    vector<int> subtype_hash_lens(subtype_keys.size());
+
+
+    int nrefs = type_keys.size();
+
+    char** rseqs = new char*[type_seqs.size()];
+    for (int i = 0; i < type_seqs.size(); ++i){
+        rseqs[i] = type_seqs[i];
+    }
+
+
+    hash_t** type_hashes = new hash_t*[type_keys.size()];
+    vector<int> type_hash_lens(type_keys.size());
+
+    hash_t** type_minhashes = new hash_t*[type_keys.size()];
+    vector<int> type_min_lens(type_keys.size());
+
+    int bsz = 10000;
+
+    map<char, set<hash_t>> lin_to_hashes;
+    map<char, set<hash_t>> lin_to_uniqs;
+    map<string, set<hash_t>> sublin_to_hashes;
+    map<string, unordered_set<hash_t>> sublin_to_uniqs;
+
+    HASHTCounter* refhtc = new HASHTCounter(10000000000);
+    HASHTCounter* readhtc = new HASHTCounter(10000000000);
+
+    vector<string> lineage_names;
+    vector<string> sublineage_names;
+    vector<hash_t*> lineage_hashes;
+    vector<hash_t*> sublineage_hashes;
+    vector<int> lineage_hash_lens;
+    vector<int> sublineage_hash_lens;
+
+    // Hash our type references
+    #pragma omp parallel
+    {
+
+        // Convert HPV type references -> MinHash signatures
+        #pragma omp for
+        for (int i = 0; i < nrefs; ++i){
+            calc_hashes(type_seqs[i], type_lens[i], kmer_sizes[0], type_hashes[i], type_hash_lens[i], refhtc);
+            minhashes(type_hashes[i], type_hash_lens[i], sketch_size, type_minhashes[i], type_min_lens[i]);
+        }
+
+        // hash hpv16 lineage/sublineage sequences
+        #pragma omp for
+        for (int i = 0; i < n_subtypes; ++i){
+            calc_hashes(subtype_seqs[i], subtype_lens[i], kmer_sizes[0], subtype_hashes[i], subtype_hash_lens[i]);
+        }
+
+
+        // Create lineage-specific kmer table
+        #pragma omp single
+        {
+            for (int i = 0; i < n_subtypes; ++i){
+                char lin = subtype_keys[i][0];
+                for (int j = 0; j < subtype_hash_lens[i]; ++j ){
+                    lin_to_hashes[lin].insert(subtype_hashes[i][j]);
+                }
+            }
+
+
+            for (auto x : lin_to_hashes){
+                // Holds the set difference between the lineage hashes.
+                // Has to be a vector since we need resize();
+                 vector<hash_t> diff(x.second.size() + 1000);
+                 vector<hash_t> xdiff(x.second.begin(), x.second.end());
+                 // Holds the unique hashes of our lineages
+                 unordered_set<hash_t> uniqs;
+                 std::vector<hash_t>::iterator it;
+
+                 for (auto y : lin_to_hashes){
+                     if (x.first == y.first){
+                         continue;
+                     }
+                     else{
+                        it=std::set_difference(xdiff.begin(), xdiff.end(), y.second.begin(), y.second.end(), diff.begin());
+                        diff.resize(it-diff.begin());
+                        xdiff = diff; 
+                     }
+                 }
+
+                 lin_to_uniqs[x.first].insert(xdiff.begin(), xdiff.end());
+                 lineage_names.push_back(string(1, x.first));
+                 hash_t* n = new hash_t[xdiff.size()];
+                 int count = 0;
+                 for (auto x : xdiff){
+                     n[count++] = x;
+                 }
+                 lineage_hashes.push_back(n);
+                 mkmh::sort(n, xdiff.size());
+                 lineage_hash_lens.push_back(xdiff.size());
+            }
+
+            cerr << "Lineage specific kmer table created:" << endl;
+            for (auto t : lin_to_uniqs){
+                cerr << "\t" << t.first << "\t" << t.second.size() << endl;
+            }
+
+            for (int i = 0; i < n_subtypes; ++i){
+                string sublin = string(subtype_keys[i]).substr(0, 2);
+                for (int j = 0; j < subtype_hash_lens[i]; ++j ){
+                    sublin_to_hashes[sublin].insert(subtype_hashes[i][j]);
+                }
+            }
+            for (auto x : sublin_to_hashes){
+                
+                vector<hash_t> diff(x.second.size() + 1000);
+                vector<hash_t> xdiff(x.second.begin(), x.second.end());
+                std::vector<hash_t>::iterator it;
+                for (auto y : sublin_to_hashes){
+                    if (x.first == y.first){
+                        continue;
+                    }
+                    else{
+                        it=std::set_difference(xdiff.begin(), xdiff.end(), y.second.begin(), y.second.end(), diff.begin());
+                        diff.resize(it-diff.begin());
+                        xdiff = diff;
+                    }
+                }
+                sublin_to_uniqs[x.first].insert(xdiff.begin(), xdiff.end());
+
+                sublineage_names.push_back( x.first);
+                hash_t* n = new hash_t[xdiff.size()];
+                int count = 0;
+                for (auto x : xdiff){
+                    n[count++] = x;
+                }
+                sublineage_hashes.push_back(n);
+                sublineage_hash_lens.push_back(xdiff.size());
+                mkmh::sort(n, xdiff.size());
+            }
+
+            cerr << "Sublineage specific kmer table created:" << endl;
+            for (auto t : sublin_to_uniqs){
+                cerr << "\t" << t.first << "\t" << t.second.size() << endl;
+            }
+        }
+
+            for (auto reads : read_files){
+                KSEQ_Reader ksq;
+                ksq.buffer_size(bsz);
+                ksq.open(reads);
+                ksequence_t* rp;
+                int rnum;
+                int l = 0;
+                while (l == 0){
+                    l = ksq.get_next_buffer(rp, rnum);
+                    #pragma omp for
+                    for (int i = 0; i < rnum; ++i){
+                        // Calculate the hashes of the read and sort them.
+                        hash_t* h;
+                        int hashnum;
+                        calc_hashes(rp[i].sequence, rp[i].length, kmer_sizes, h, hashnum);
+                        mkmh::sort(h, hashnum);
+
+                        // Classify read to type
+                        int max_shared = -1;
+                        int max_id = 0;
+                        for (int j = 0; j < nrefs; ++j){
+                            int shared = 0;
+                            hash_set_intersection_size(h, hashnum, type_hashes[j], type_hash_lens[j], shared);
+                            if (shared > max_shared){
+                                max_shared = shared;
+                                max_id = j;
+                            }
+                        }
+                        string type_name( type_keys[max_id]);
+                        // Exact kmer match read to lineage
+                        stringstream st;
+                        st << rp[i].name << "\t";
+                        st << type_name << "\t" << max_shared << "\t";
+                        
+                        vector<string> lin_names;
+                        vector<double> lin_sims;
+                        sort_by_similarity(h, hashnum, lineage_names, lineage_names.size(),
+                         lineage_hashes, lineage_hash_lens, lin_names, lin_sims);
+                        
+                        for (int x = 0; x < lin_names.size(); ++x){
+                            st << lin_names[x] << ":" << lin_sims[x] << ";";
+                        }
+
+                        st << "\t";
+
+                        vector<string> sublin_names;
+                        vector<double> sublin_sims;
+                        sort_by_similarity(h, hashnum, sublineage_names, sublineage_names.size(),
+                         sublineage_hashes, sublineage_hash_lens, sublin_names, sublin_sims);
+                        for (int x = 0; x < sublin_names.size(); ++x){
+                            st << sublin_names[x] << ":" << sublin_sims[x] << ";";
+                        }
+                        st << endl;
+                        cout << st.str();
+                        st.str("");
+                    }
+                }
+            }
+    }
+    return 0;
+        }
+        
 
         /**
          *
@@ -2749,6 +3110,9 @@ int main_filter(int argc, char** argv){
             }
             else if (cmd == "filter"){
                 return main_filter(argc, argv);
+            }
+            else if (cmd == "hpv16"){
+                return main_hpv16(argc, argv);
             }
             else{
                 print_help(argv);
