@@ -2531,6 +2531,8 @@ int main_filter(int argc, char** argv){
         kmer_sizes.push_back(default_kmer_size);
     }
 
+    omp_set_num_threads(threads);
+
     vector<string> type_keys;
     vector<char*> type_seqs;
     vector<int> type_lens;
@@ -2539,10 +2541,17 @@ int main_filter(int argc, char** argv){
     vector<char*> subtype_seqs;
     vector<int> subtype_lens;
 
+    vector<string> read_keys;
+    vector<char*> read_seqs;
+    vector<int> read_lens;
+
 
     
     if (!ref_files.empty()){
         parse_fastas(ref_files, type_keys, type_seqs, type_lens);
+    }
+    if (!read_files.empty()){
+        parse_fastas(read_files, read_keys, read_seqs, read_lens);
     }
 
     vector<char*> rfi;
@@ -2567,7 +2576,7 @@ int main_filter(int argc, char** argv){
     hash_t** type_minhashes = new hash_t*[type_keys.size()];
     vector<int> type_min_lens(type_keys.size());
 
-    int bsz = 10000;
+
 
     map<char, set<hash_t>> lin_to_hashes;
     map<char, set<hash_t>> lin_to_uniqs;
@@ -2575,8 +2584,22 @@ int main_filter(int argc, char** argv){
     map<string, unordered_set<hash_t>> sublin_to_uniqs;
 
     HASHTCounter* readhtc;
-    if (do_read_depth){
-     readhtc = new HASHTCounter(10000000000);
+    if (do_read_depth)
+    {
+        readhtc = new HASHTCounter(10000000000);
+
+        #pragma omp parallel for
+        for (int i = 0; i < read_keys.size(); ++i)
+        {
+            hash_t *h;
+            int hashnum;
+            //#pragma omp task
+            {
+                calc_hashes(read_seqs[i], read_lens[i], kmer_sizes, h, hashnum, readhtc);
+                delete[] h;
+            }
+        }
+        
     }
 
     vector<string> lineage_names;
@@ -2692,27 +2715,17 @@ int main_filter(int argc, char** argv){
             }
         }
 
-            for (auto reads : read_files){
-                KSEQ_Reader ksq;
-                ksq.buffer_size(bsz);
-                ksq.open(reads);
-                ksequence_t* rp;
-                int rnum;
-                int l = 0;
-                while (l == 0){
-                    l = ksq.get_next_buffer(rp, rnum);
-                    #pragma omp for
-                    for (int i = 0; i < rnum; ++i){
+            
+                #pragma omp for
+                for (int i = 0; i < read_keys.size(); ++i){
                         // Calculate the hashes of the read and sort them.
                         hash_t* h;
                         int hashnum;
-                        if (!do_read_depth){
-                            calc_hashes(rp[i].sequence, rp[i].length, kmer_sizes, h, hashnum);
-                        }
-                        else{
-                            calc_hashes(rp[i].sequence, rp[i].length, kmer_sizes, h, hashnum, readhtc);
+                        calc_hashes(read_seqs[i], read_lens[i], kmer_sizes, h, hashnum);
+                        if (do_read_depth){
                             mask_by_frequency(h, hashnum, readhtc, min_kmer_occ);
                         }
+                        
                         mkmh::sort(h, hashnum);
 
                         // Classify read to type
@@ -2729,7 +2742,7 @@ int main_filter(int argc, char** argv){
                         string type_name( type_keys[max_id]);
                         // Exact kmer match read to lineage
                         stringstream st;
-                        st << rp[i].name << "\t";
+                        st << read_keys[i] << "\t";
                         st << type_name << "\t" << max_shared << "/" << hashnum << "\t";
                         
                         vector<string> lin_names;
@@ -2755,8 +2768,8 @@ int main_filter(int argc, char** argv){
                         st.str("");
                         delete [] h;
                     }
-                }
-            }
+                
+            
     }
     return 0;
         }
