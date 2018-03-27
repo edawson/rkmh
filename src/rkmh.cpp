@@ -2586,7 +2586,7 @@ int main_filter(int argc, char** argv){
     HASHTCounter* readhtc;
     if (do_read_depth)
     {
-        readhtc = new HASHTCounter(10000000000);
+        readhtc = new HASHTCounter(8000000000);
 
         #pragma omp parallel for
         for (int i = 0; i < read_keys.size(); ++i)
