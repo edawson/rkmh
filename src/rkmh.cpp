@@ -2455,6 +2455,10 @@ int main_filter(int argc, char** argv){
             int min_matches = -1;
             int min_diff = 0;
 
+            bool do_read_depth = false;
+            bool do_ref_depth = false;
+            
+            int default_kmer_size = 16;
             vector<int> kmer_sizes;
             
             int c;
@@ -2507,6 +2511,7 @@ int main_filter(int argc, char** argv){
                         break;
                     case 'M':
                         min_kmer_occ = atoi(optarg);
+                        do_read_depth = true;
                         break;
                     case 'N':
                         min_matches = atoi(optarg);
@@ -2520,6 +2525,11 @@ int main_filter(int argc, char** argv){
 
                 }
             }
+
+    if (kmer_sizes.size() < 1){
+        cerr << "NO KMER SIZE PROVIDED. USING A DEFAULT KMER SIZE OF " << default_kmer_size << endl;
+        kmer_sizes.push_back(default_kmer_size);
+    }
 
     vector<string> type_keys;
     vector<char*> type_seqs;
@@ -2564,8 +2574,10 @@ int main_filter(int argc, char** argv){
     map<string, set<hash_t>> sublin_to_hashes;
     map<string, unordered_set<hash_t>> sublin_to_uniqs;
 
-    HASHTCounter* refhtc = new HASHTCounter(10000000000);
-    HASHTCounter* readhtc = new HASHTCounter(10000000000);
+    HASHTCounter* readhtc;
+    if (do_read_depth){
+     readhtc = new HASHTCounter(10000000000);
+    }
 
     vector<string> lineage_names;
     vector<string> sublineage_names;
@@ -2581,7 +2593,7 @@ int main_filter(int argc, char** argv){
         // Convert HPV type references -> MinHash signatures
         #pragma omp for
         for (int i = 0; i < nrefs; ++i){
-            calc_hashes(type_seqs[i], type_lens[i], kmer_sizes[0], type_hashes[i], type_hash_lens[i], refhtc);
+            calc_hashes(type_seqs[i], type_lens[i], kmer_sizes[0], type_hashes[i], type_hash_lens[i]);
             minhashes(type_hashes[i], type_hash_lens[i], sketch_size, type_minhashes[i], type_min_lens[i]);
         }
 
@@ -2630,8 +2642,8 @@ int main_filter(int argc, char** argv){
                  for (auto x : xdiff){
                      n[count++] = x;
                  }
-                 lineage_hashes.push_back(n);
                  mkmh::sort(n, xdiff.size());
+                 lineage_hashes.push_back(n);
                  lineage_hash_lens.push_back(xdiff.size());
             }
 
@@ -2669,9 +2681,9 @@ int main_filter(int argc, char** argv){
                 for (auto x : xdiff){
                     n[count++] = x;
                 }
+                mkmh::sort(n, xdiff.size());
                 sublineage_hashes.push_back(n);
                 sublineage_hash_lens.push_back(xdiff.size());
-                mkmh::sort(n, xdiff.size());
             }
 
             cerr << "Sublineage specific kmer table created:" << endl;
@@ -2694,7 +2706,13 @@ int main_filter(int argc, char** argv){
                         // Calculate the hashes of the read and sort them.
                         hash_t* h;
                         int hashnum;
-                        calc_hashes(rp[i].sequence, rp[i].length, kmer_sizes, h, hashnum);
+                        if (!do_read_depth){
+                            calc_hashes(rp[i].sequence, rp[i].length, kmer_sizes, h, hashnum);
+                        }
+                        else{
+                            calc_hashes(rp[i].sequence, rp[i].length, kmer_sizes, h, hashnum, readhtc);
+                            mask_by_frequency(h, hashnum, readhtc, min_kmer_occ);
+                        }
                         mkmh::sort(h, hashnum);
 
                         // Classify read to type
@@ -2712,7 +2730,7 @@ int main_filter(int argc, char** argv){
                         // Exact kmer match read to lineage
                         stringstream st;
                         st << rp[i].name << "\t";
-                        st << type_name << "\t" << max_shared << "\t";
+                        st << type_name << "\t" << max_shared << "/" << hashnum << "\t";
                         
                         vector<string> lin_names;
                         vector<double> lin_sims;
@@ -2735,6 +2753,7 @@ int main_filter(int argc, char** argv){
                         st << endl;
                         cout << st.str();
                         st.str("");
+                        delete [] h;
                     }
                 }
             }
