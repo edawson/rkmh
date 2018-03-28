@@ -1405,7 +1405,8 @@ int main_filter(int argc, char** argv){
 
                     // hash me
 
-#pragma omp task_async
+//#pragma omp task_async
+#pragma omp task
                     {
                         vector<hash_t> r = calc_hashes(seq->seq.s, len, kmer);
                         hash_t* hashes = &(*r.begin());

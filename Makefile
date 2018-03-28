@@ -6,7 +6,7 @@
 ifdef IS_ICPC
 	CXX:=icpc
 	#CXXFLAGS:= -O0 -std=c++11 -funroll-loops -ggdb -pg -qopenmp
-	CXXFLAGS:= -O3 -xAVX -std=c++11 -qopenmp -funroll-loops
+	CXXFLAGS:= -O3 -xHost -std=c++11 -qopenmp
 else
 	CXX:=g++
 	CXXFLAGS:= -O3 -std=c++11 -fopenmp -mtune=native -ggdb -g
