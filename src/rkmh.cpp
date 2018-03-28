@@ -866,25 +866,30 @@ int main_stream(int argc, char** argv){
 
                 for (int j = 0; j < numrefs; ++j){
                     //#pragma omp task depend(in: mins, min_num) depend(out: shared_arr)
-                        hash_set_intersection_size(mins, min_num, ref_minhashes[j], ref_min_lens[j], shared_arr[j]);
+                        hash_intersection_size(mins, min_num, ref_minhashes[j], ref_min_lens[j], shared_arr[j]);
                 }
                 //#pragma omp task depend(in: shared_arr)
                 {
 
-                    //int max_shared = -1;
-                    //int max_id = -1;
-                    //for (int j = 0; j < numrefs; ++j){
-                    //    if (shared_arr[j] max_shared
-                    //    max_shared = max_shared < shared_arr[j] ? shared_arr[j] : max_shared;
-                    //    max_id = max_shared < shared_arr[j] ? j : max_id;
-                    //}
+                    int max_shared = -1;
+                    int max_id = 0;
+                    int diff = 0;
+                    for (int j = 0; j < numrefs; ++j){
+                        if (shared_arr[j] > max_shared){
+                            diff = shared_arr[j] - max_shared;
+                            max_shared = shared_arr[j];
+                            max_id = j;
+                        }
+                    }
 
-                    int* max_shared_ptr = std::max_element(shared_arr, shared_arr + numrefs);
-
-                    int max_id = std::distance(shared_arr, max_shared_ptr);
+                    //int* max_shared_ptr = std::max_element(shared_arr, shared_arr + numrefs);
+                    //int max_id = std::distance(shared_arr, max_shared_ptr);
+                    bool diff_filter = diff > min_diff;
+                    bool depth_filter = min_num <= min_matches;
+                    bool match_filter = max_shared < min_matches;
 
                     stringstream outre;
-                    outre << ref_keys[max_id] << "\t" << read_keys[i]  <<  "\t" << (*max_shared_ptr) << "\t" << sketch_size << endl;
+                    outre << ref_keys[max_id] << "\t" << read_keys[i]  <<  "\t" << max_shared << "\t" << sketch_size << (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (diff_filter ? "" : "FAIL:DIFF") << endl;
                     cout << outre.str();
                     outre.str("");
                     delete [] mins;
@@ -914,7 +919,7 @@ int main_stream(int argc, char** argv){
                 
 
                 for (int j = 0; j < numrefs; ++j){
-                        hash_set_intersection_size(mins, num_mins, ref_minhashes[j], ref_min_lens[j], shared_arr[j]);
+                        hash_intersection_size(mins, num_mins, ref_minhashes[j], ref_min_lens[j], shared_arr[j]);
                 }
                 int* max_shared_ptr = std::max_element(shared_arr, shared_arr + numrefs);
 
@@ -922,6 +927,7 @@ int main_stream(int argc, char** argv){
 
                 stringstream outre;
                 outre << ref_keys[max_id] << "\t" << read_keys[i]  <<  "\t" << (*max_shared_ptr) << "\t" << min(sketch_size, read_hash_lens[i]) << endl;
+                //    outre << ref_keys[max_id] << "\t" << read_keys[i]  <<  "\t" << max_shared << "\t" << sketch_size << (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (diff_filter ? "" : "FAIL:DIFF") << endl;
                 cout << outre.str();
                 outre.str("");
                 delete [] mins;
