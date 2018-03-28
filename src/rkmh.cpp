@@ -2443,12 +2443,8 @@ int main_filter(int argc, char** argv){
         // And returns the predicted sublineage.
         int main_hpv16(int argc, char** argv){
             vector<char*> read_files;
-
             vector<char*> ref_files;
-
-            char* hpv_type_ref_file = "data/all_pave_ref.fa";
-            ref_files.push_back(hpv_type_ref_file);
-            char* sublin_type_ref_file = "data/new_refs.fa";
+            string refpath = "data";
 
             int sketch_size = 4000;
             int threads = 1;
@@ -2487,7 +2483,7 @@ int main_filter(int argc, char** argv){
                 };
 
                 int option_index = 0;
-                c = getopt_long(argc, argv, "hk:f:r:s:t:M:N:D:", long_options, &option_index);
+                c = getopt_long(argc, argv, "hk:f:R:s:t:M:N:D:", long_options, &option_index);
                 if (c == -1){
                     break;
                 }
@@ -2498,6 +2494,9 @@ int main_filter(int argc, char** argv){
                         break;
                     case 'f':
                         read_files.push_back(optarg);
+                        break;
+                    case 'R':
+                        refpath = optarg;
                         break;
                     case 'k':
                         kmer_sizes.push_back(atoi(optarg));
@@ -2531,6 +2530,11 @@ int main_filter(int argc, char** argv){
         cerr << "NO KMER SIZE PROVIDED. USING A DEFAULT KMER SIZE OF " << default_kmer_size << endl;
         kmer_sizes.push_back(default_kmer_size);
     }
+
+    string hpv_type_ref_file = refpath + "/" + "all_pave_ref.fa";
+    ref_files.push_back( (char*) hpv_type_ref_file.c_str());
+    string sublin_type_refs = refpath +  "/" + "new_refs.fa";
+    char* sublin_type_ref_file = (char*) sublin_type_refs.c_str();
 
     omp_set_num_threads(threads);
 
