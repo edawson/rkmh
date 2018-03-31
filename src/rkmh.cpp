@@ -2695,10 +2695,18 @@ int main_filter(int argc, char** argv){
                  lineage_hash_lens.push_back(xdiff.size());
             }
 
+            ofstream ofi;
+            ofi.open("lineage_specific_hashes." + kmer_size + ".tst");
+
             cerr << "Lineage specific kmer table created:" << endl;
             for (auto t : lin_to_uniqs){
                 cerr << "\t" << t.first << "\t" << t.second.size() << endl;
+                ofi << t.first << "\t";
+                for (int x = 0;  x < t.second.size() - 1; ++x){
+                    
+                }
             }
+
 
             for (int i = 0; i < n_subtypes; ++i){
                 string sublin = string(subtype_keys[i]).substr(0, 2);
@@ -2772,21 +2780,32 @@ int main_filter(int argc, char** argv){
                         
                         vector<string> lin_names;
                         vector<double> lin_sims;
+                        vector<int> lin_intersections;
                         sort_by_similarity(h, hashnum, lineage_names, lineage_names.size(),
-                         lineage_hashes, lineage_hash_lens, lin_names, lin_sims);
+                         lineage_hashes, lineage_hash_lens, lin_names, lin_sims, lin_intersections);
                         
                         for (int x = 0; x < lin_names.size(); ++x){
                             st << lin_names[x] << ":" << lin_sims[x] << ";";
                         }
-
+                        
                         st << "\t";
 
                         vector<string> sublin_names;
                         vector<double> sublin_sims;
+                        vector<int> sublin_intersections;
                         sort_by_similarity(h, hashnum, sublineage_names, sublineage_names.size(),
-                         sublineage_hashes, sublineage_hash_lens, sublin_names, sublin_sims);
+                         sublineage_hashes, sublineage_hash_lens, sublin_names, sublin_sims, sublin_intersections);
                         for (int x = 0; x < sublin_names.size(); ++x){
                             st << sublin_names[x] << ":" << sublin_sims[x] << ";";
+                        }
+
+                        st << "\t";
+                        for (int x = 0; x < lin_names.size(); ++x){
+                            st << lin_intersections[x] << ";";
+                        }
+                        st << "\t";
+                        for (int x = 0; x < sublin_names.size(); ++x){
+                            st << sublin_intersections[x] << ";";
                         }
                         st << endl;
                         cout << st.str();
