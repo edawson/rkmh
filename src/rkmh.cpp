@@ -2696,15 +2696,17 @@ int main_filter(int argc, char** argv){
             }
 
             ofstream ofi;
-            ofi.open("lineage_specific_hashes." + kmer_size + ".tst");
+            ofi.open("lineage_specific_hashes." + to_string(kmer_sizes[0]) + ".tst");
 
             cerr << "Lineage specific kmer table created:" << endl;
             for (auto t : lin_to_uniqs){
                 cerr << "\t" << t.first << "\t" << t.second.size() << endl;
                 ofi << t.first << "\t";
-                for (int x = 0;  x < t.second.size() - 1; ++x){
-                    
+                for (auto x : t.second){
+                    ofi << x << "\t";
                 }
+                
+                ofi << endl;
             }
 
 
