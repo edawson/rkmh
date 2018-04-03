@@ -93,12 +93,12 @@ if __name__ == "__main__":
     if l_total < 1000:
         low_read_lins = "WARN:low_lineage_counts:" + str(l_total)
     else:
-        low_read_lins = "INFO:low_lineage_counts:" + str(l_total)
+        low_read_lins = "INFO:lineage_counts:" + str(l_total)
     low_read_sublins = ""
     if s_total < 1000:
         low_read_sublins = "WARN:low_sublineage_counts:" + str(s_total)
     else:
-        low_read_sublins = "INFO:low_sublineage_counts:" + str(s_total)
+        low_read_sublins = "INFO:sublineage_counts:" + str(s_total)
     #pprint.pprint(l_pct_d)
     #pprint.pprint(s_pct_d)
     #pprint.pprint (sublin_match_d)
