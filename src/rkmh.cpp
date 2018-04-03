@@ -1510,26 +1510,36 @@ int main_filter(int argc, char** argv){
      * kmer size: k
      * readfile: f
      * ref file: r
-     * min_inform: I
-     * min diff: D
-     * kmer_occ: M
      * outfile: o
      * precalc: p
      * minimum depth: -d
+     *
+     * Outline:
+     * Read in the reference(s) and hash them
+     * Keep the hashes in the original order
+     *
+     * Read in the reads and hash them.
+     * Add all the read hashes to a counting map or HASHTCounter.
+     * Then, for each reference:
+     *      Iterate over its length
+     *      at each position, check the mean depth in a X bp window
+     *      and compare at to the depth at positon C. If depth(C) < 0.9 * Depth(X),
+     *      permute kmer(C) and look up the depth of all C' kmers.
+     *      If any of the rescue kmers exceed the original depth, report an SNV at that position.
+     *      Also, report the "allele fraction" of each kmer, i.e. the depth of that kmer divided by the
+     *      average depth at the position.
      *
      */
     int main_call(int argc, char** argv){
         vector<char*> ref_files;
         vector<char*> read_files;
 
+        bool useHASHTCounter = true;
+
         vector<int> kmer;
 
         int sketch_size = 1000;
         int threads = 1;
-        int min_kmer_occ = 1;
-        int min_matches = -1;
-        int min_diff = 0;
-        int max_samples = 1000000;
         int window_len = 100;
 
         bool show_depth = false;
@@ -1552,16 +1562,13 @@ int main_filter(int argc, char** argv){
                 {"reference", required_argument, 0, 'r'},
                 {"sketch", required_argument, 0, 's'},
                 {"threads", required_argument, 0, 't'},
-                {"min-kmer-occurence", required_argument, 0, 'M'},
-                {"min-matches", required_argument, 0, 'N'},
                 {"show-depth", required_argument, 0, 'd'},
-                {"max-samples", required_argument, 0, 'I'},
                 {"window-len", required_argument, 0, 'w'},
                 {0,0,0,0}
             };
 
             int option_index = 0;
-            c = getopt_long(argc, argv, "hdk:f:r:s:t:M:N:I:w:", long_options, &option_index);
+            c = getopt_long(argc, argv, "hdk:f:r:s:t:w:", long_options, &option_index);
             if (c == -1){
                 break;
             }
@@ -1586,12 +1593,6 @@ int main_filter(int argc, char** argv){
                     break;
                 case 's':
                     sketch_size = atoi(optarg);
-                    break;
-                case 'M':
-                    min_kmer_occ = atoi(optarg);
-                    break;
-                case 'I':
-                    max_samples = atoi(optarg);
                     break;
                 case 'w':
                     window_len = atoi(optarg);
@@ -1634,18 +1635,12 @@ int main_filter(int argc, char** argv){
         // we know the size of these and we carry the lengths around
 
         vector<string> ref_keys;
-        ref_keys.reserve(500);
         vector<char*> ref_seqs;
-        ref_seqs.reserve(500);
         vector<int> ref_lens;
-        ref_lens.reserve(500);
 
         vector<string> read_keys;
-        read_keys.reserve(2000);
         vector<char*> read_seqs;
-        read_seqs.reserve(2000);
         vector<int> read_lens;
-        read_lens.reserve(2000);
 
         // TODO try something faster than a map / unordered_map?
         // a massive array?
@@ -1664,7 +1659,7 @@ int main_filter(int argc, char** argv){
         }
         else{
             cerr << "No references were provided. Please provide at least one reference file in fasta/fastq format." << endl;
-            help_classify(argv);
+            help_call(argv);
             exit(1);
         }
 
@@ -1673,7 +1668,7 @@ int main_filter(int argc, char** argv){
         }
         else{
             cerr << "No reads were provided. Please provide at least one read file in fasta/fastq format." << endl;
-            help_classify(argv);
+            help_call(argv);
             exit(1);
         }
 
@@ -1689,31 +1684,64 @@ int main_filter(int argc, char** argv){
         vector<hash_t*> read_hashes(read_keys.size());
         vector<int> read_hash_nums(read_keys.size());
 
+        int numrefs = ref_keys.size();
+        int numreads = read_keys.size();
+        HASHTCounter* htc;
+        // Holds the average depth of all kmers covering a position
+        vector<int*> ref_depths(ref_keys.size());
+        vector<double> ref_avgs(ref_keys.size());
+        
+        if (useHASHTCounter){
+            htc = new HASHTCounter(40000000);
+        }
 
-        vector<vector<hash_t> > ref_mins(ref_keys.size(), vector<hash_t>(1));
+        std::function<double(int* depth_arr, int start, int window, int size)> avg_arr = [](int* depth_arr, int start, int window, int size){
+            int tot = 0;
+            if (start + window > size){
+                cerr << "ERROR: start + window > size. Array OOB when calculating avg depth." << endl;
+                assert(start + window < size);
+            }
+            for (int i = 0; i < window; ++i){
+                tot += depth_arr[i]; 
+            }
+            return (double) tot / (double) window;
+        };
 
 
-#pragma omp master
-        cerr << "Hashing references... ";
-        hash_sequences(ref_keys, ref_seqs, ref_lens,
-                ref_hashes, ref_hash_nums, kmer,
-                read_hash_to_depth,
-                ref_hash_to_num_samples,
-                false,
-                (max_samples < 10000));
-#pragma omp master
-        cerr << " Done." << endl;
+        #pragma omp parallel
+        {
+            #pragma omp for
+            for (int i = 0; i < numrefs; ++i){
+                calc_hashes(ref_seqs[i], ref_lens[i], kmer, ref_hashes[i], ref_hash_nums[i]);
+                ref_depths[i] = new int[ref_lens[i]];
+            }
+            #pragma omp for
+            for (int i = 0; i < numreads; ++i){
+                hash_t* h;
+                int num;
+                calc_hashes(read_seqs[i], read_lens[i], kmer, h, num, htc);
+                delete [] h;
+            }
+            for (int i = 0; i < numrefs; ++i){
+                for (int j = 0; j < ref_lens[i]; ++j){
+                   ref_depths[i][j] = htc->get(ref_hashes[i][j]); 
+                }
+                #pragma omp for
+                for (int j = 0; j < ref_lens[i]; ++j){
+                    ref_avgs[i] = avg_arr(ref_depths[i], 0, ref_lens[i], ref_lens[i]);
+                }
+            }
+            #pragma omp single
+            {
+                for (int i = 0; i < numrefs; ++i){
+                    for (int j = 0; j < ref_lens[i]; ++j){
+                        
+                    }
+                }
+            }
 
-#pragma omp master
-        cerr << "Hashing reads... ";
-        hash_sequences(read_keys, read_seqs, read_lens,
-                read_hashes, read_hash_nums, kmer,
-                read_hash_to_depth,
-                ref_hash_to_num_samples,
-                (min_kmer_occ > 0),
-                false);
-#pragma omp master
-        cerr << " Done." << endl;
+        }
+
 
         std::function<double(vector<int>)> avg = [](vector<int> n_list){
             int ret = 0;
@@ -1722,12 +1750,6 @@ int main_filter(int argc, char** argv){
             }
             return (double) ret / (double) n_list.size();
         };
-
-        std::function<double(int* depth_arr, int start, int window, int size)> avg_arr = [](int* depth_arr, int start, int window, int size){
-            int end =  1;
-            return 2.0;
-        };
-
         vector<char> a_ret = {'C', 'T', 'G'};
         vector<char> c_ret = {'T', 'G', 'A'};
         vector<char> t_ret = {'C', 'G', 'A'};
@@ -1735,7 +1757,6 @@ int main_filter(int argc, char** argv){
 
 
         std::function<vector<char>(char)> rotate_snps = [&a_ret, &c_ret, &g_ret, &t_ret](char c){
-
             if ( c == 'A' || c == 'a'){
                 return a_ret;
             }
@@ -1748,7 +1769,6 @@ int main_filter(int argc, char** argv){
             else if (c == 'G' || c == 'g'){
                 return g_ret; 
             }
-
         };
 
         std::function<vector<string>(string)> permute = [&](string x){
@@ -2840,6 +2860,9 @@ int main_filter(int argc, char** argv){
 */
 
         int main_classify(int argc, char** argv){
+            
+            cerr << "CLASSIFY COMMAND IS TEMPORARILY UNAVAILABLE: TRY rkmh stream INSTEAD." << endl;
+            return -1;
 
             vector<char*> ref_files;
             vector<char*> read_files;
@@ -2938,18 +2961,12 @@ int main_filter(int argc, char** argv){
 
 
             vector<string> ref_keys;
-            ref_keys.reserve(500);
             vector<char*> ref_seqs;
-            ref_seqs.reserve(500);
             vector<int> ref_lens;
-            ref_lens.reserve(500);
 
             vector<string> read_keys;
-            read_keys.reserve(2000);
             vector<char*> read_seqs;
-            read_seqs.reserve(2000);
             vector<int> read_lens;
-            read_lens.reserve(2000);
 
             unordered_map<hash_t, int> read_hash_to_depth;
             read_hash_to_depth.reserve(10000);
@@ -2957,7 +2974,7 @@ int main_filter(int argc, char** argv){
             ref_hash_to_num_samples.reserve(10000);
 
 
-#pragma omp master
+            #pragma omp master
             cerr << "Parsing sequences..." << endl;
 
             if (ref_files.size() >= 1){
@@ -2980,183 +2997,34 @@ int main_filter(int argc, char** argv){
 
 
 
-#pragma omp master
+            #pragma omp master
             cerr << " Done." << endl <<
                 ref_keys.size() << " references and " << read_keys.size() << " reads parsed." << endl;
 
+            int refnums = ref_keys.size();
             vector<hash_t*> ref_hashes(ref_keys.size());
             vector<int> ref_hash_nums(ref_keys.size());
 
             vector<hash_t*> read_hashes(read_keys.size());
             vector<int> read_hash_nums(read_keys.size());
 
-
-            int* read_sketch_starts = new int[(read_keys.size())];
-            int* ref_sketch_starts = new int [(ref_keys.size())];
-            int* read_sketch_lens = new int [(read_keys.size())];
-            int* ref_sketch_lens = new int [(ref_keys.size())];
-            vector<hash_t*> read_sketches(read_keys.size());
-            vector<hash_t*> ref_sketches(ref_keys.size());
-
-            int sbuf_size = 100;
-
-            vector<string> sbuf(sbuf_size);
-            int sbuf_ind = 0;
-
-#pragma omp master
-            cerr << "Hashing references... ";
-            hash_sequences(ref_keys, ref_seqs, ref_lens,
-                    ref_hashes, ref_hash_nums, kmer,
-                    read_hash_to_depth,
-                    ref_hash_to_num_samples,
-                    false,
-                    (max_samples < 10000));
-#pragma omp master
-            cerr << " Done." << endl;
-
-#pragma omp master
-            cerr << "Hashing reads... ";
-            hash_sequences(read_keys, read_seqs, read_lens,
-                    read_hashes, read_hash_nums, kmer,
-                    read_hash_to_depth,
-                    ref_hash_to_num_samples,
-                    (min_kmer_occ > 0),
-                    false);
-#pragma omp master
-            cerr << " Done." << endl;
-
 #pragma omp parallel
             {
-
-#pragma omp for
-
-                for (int i = 0; i < ref_keys.size(); i++){
-                    ref_sketch_starts[i] = 0;
-                    ref_sketch_lens[i] = 0;
-                    ref_sketches[i] = new hash_t[ sketch_size ];
-                    std::sort(ref_hashes[i], ref_hashes[i] + ref_hash_nums[i]);
-                    if (max_samples < 10000){
-                        for (int j = 0; j < ref_hash_nums[i]; j++){
-                            if (ref_hashes[i][j] != 0 && ref_hash_to_num_samples[ref_hashes[i][j]] <= max_samples)
-                                ref_sketches[i][ref_sketch_lens[i]] = ref_hashes[i][j];
-                            ++ref_sketch_lens[i];
-
-                            if (ref_sketch_lens[i] >= sketch_size){
-                                break;
-                            }
-                            else{
-                                continue;
-                            }
-                        }
-
-                    }
-                    else{
-                        ref_sketches[i] = ref_hashes[i];
-                        while (ref_hashes[i][ref_sketch_starts[i]] == 0 && ref_sketch_starts[i] < ref_hash_nums[i]){
-                            ++ref_sketch_starts[i];
-                        }
-                        int diff = ref_hash_nums[i] - ref_sketch_starts[i];
-                        ref_sketch_lens[i] = (diff < sketch_size) ? diff : sketch_size; 
-
-                    }
-
-                }
-
-#pragma omp for
-                for (int i = 0; i < read_keys.size(); i++){
-                    read_sketch_starts[i] = 0;
-                    read_sketch_lens[i] = 0;
-                    hash_t* hh = read_hashes[i];
-                    int hh_l = read_hash_nums[i];
-                    stringstream outre;
-
-                    sort(hh, hh + hh_l);
-                    if (min_kmer_occ > 0){
-                        read_sketches[i] = new hash_t[sketch_size];
-                        while(hh[read_sketch_starts[i]] == 0 && read_sketch_starts[i] < read_hash_nums[i]){
-                            ++(read_sketch_starts[i]);
-                        }
-
-                        for (int d_ind = read_sketch_starts[i]; d_ind < read_hash_nums[i]; ++d_ind){
-                            int k_depth = 0;
-                            // I'm sorry for using auto here, but
-                            // read_hash_to_depth is a map<hash_t, int> FWIW.
-                            auto k_d_iter = read_hash_to_depth.find(hh[d_ind]);
-                            if (k_d_iter != read_hash_to_depth.end()){
-                                k_depth = k_d_iter->second;
-                            }
-                            if ( k_depth >= min_kmer_occ){
-                                read_sketches[i][read_sketch_lens[i]] = hh[d_ind];
-                                ++(read_sketch_lens[i]);
-                                if (read_sketch_lens[i] == sketch_size){
-                                    break;
-                                }
-                            }
-                        }
-                        read_sketch_starts[i] = 0;
-
-                    }
-                    else{
-                        read_sketches[i] = read_hashes[i];
-                        while(read_sketches[i][read_sketch_starts[i]] == 0 && read_sketch_starts[i] < read_hash_nums[i]){
-                            ++read_sketch_starts[i];
-                        }
-                        int diff = hh_l - read_sketch_starts[i];
-                        read_sketch_lens[i] = diff < sketch_size ? diff : sketch_size;
-
-                    }
-                    tuple<string, int, int, bool> result;
-                    result = classify_and_count_diff_filter(ref_keys, ref_sketches, read_sketches[i], ref_sketch_starts, read_sketch_starts[i], ref_sketch_lens, read_sketch_lens[i], sketch_size, min_diff);
-
-
-                    bool depth_filter = read_sketch_lens[i] <= 0; 
-                    bool match_filter = std::get<1>(result) < min_matches;
-
-                    outre  << "Sample: " << read_keys[i] << "\t" << "Result: " << 
-                        std::get<0>(result) << "\t" << std::get<1>(result) << "\t" << std::get<2>(result) << "\t" <<
-                        (depth_filter ? "FAIL:DEPTH" : "") << "\t" << (match_filter ? "FAIL:MATCHES" : "") << "\t" << (std::get<3>(result) ? "" : "FAIL:DIFF") << endl;
-
-
-
-
-#pragma omp critical
-                    cout << outre.str();
-
-                    outre.str("");
-                    if (read_hashes[i] != read_sketches[i]){
-                        delete [] read_hashes[i];
-                    }
-                    delete [] read_sketches[i];
-
-
-                }
-
-            }
-
-            for (int sbi = 0; sbi < sbuf_ind; ++sbi){
-                cout << sbuf[sbi];
-            }
-
-
-            for (auto x : read_seqs){
-                delete [] x;
-            }
-            for (int i = 0; i < ref_keys.size(); i++){
-                if (ref_hashes[i] != ref_sketches[i]){
+                #pragma omp for
+                for (int i = 0; i < refnums; ++i){
+                    
+                    mkmh::calc_hashes(ref_seqs[i], ref_lens[i], kmer, ref_hashes[i], ref_hash_nums[i]);
+                    mkmh::sort(ref_hashes[i], ref_hash_nums[i]);
+                    hash_t* t_mins;
+                    int t_num;
+                    mkmh::minhashes(ref_hashes[i], ref_hash_nums[i], sketch_size, t_mins, t_num);
                     delete [] ref_hashes[i];
+                    ref_hashes[i] = t_mins;
+                    ref_hash_nums[i] = t_num;
                 }
-                delete [] ref_sketches[i];
             }
 
-            for (auto y : ref_seqs){
-                delete [] y;
-            }
 
-            delete [] read_sketch_lens;
-            delete [] ref_sketch_lens;
-
-            delete [] read_sketch_starts;
-            delete [] ref_sketch_starts;
             return 0;
         }
 
