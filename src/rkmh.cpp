@@ -1326,87 +1326,9 @@ int main_filter(int argc, char** argv){
     //
     // Thanks heavens for https://biowize.wordpress.com/2013/03/05/using-kseq-h-with-stdin/
 
-    if (streamify_me_capn){
-        FILE *instream = NULL;
-        instream = stdin;
-
-        gzFile fp = gzdopen(fileno(instream), "r");
-        kseq_t *seq = kseq_init(fp);
-        stringstream outre;
-        while (kseq_read(seq) >= 0){
-            to_upper(seq->seq.s, seq->seq.l);
-
-            string name = string(seq->name.s);
-            int len = seq->seq.l;
-
-            // hash me
-            vector<hash_t> r = calc_hashes(seq->seq.s, len, kmer);
-            hash_t* hashes = &(*r.begin());
-            int hashlen = r.size();
-
-
-            //tuple<hash_t*, int> hashes_and_num =  allhash_unsorted_64_fast(seq->seq.s, len, kmer);
-            stringstream outre;
-
-            std::sort(hashes, hashes + hashlen);
-            // and then just sketch me
-            // TODO need to handle some read_depth
-            int sketch_start = 0;
-            int sketch_len = 0;
-            hash_t* mins = new hash_t[sketch_size];
-            if (min_kmer_occ > 0){
-                for (int i = 0; i < hashlen; ++i){
-                    hash_t curr = *(hashes + i);
-                    if (read_hash_counter.get(curr) >= min_kmer_occ && curr != 0){
-                        mins[sketch_len] = curr;
-                        ++sketch_len;
-                    }
-                    if (sketch_len == sketch_size){
-                        break;
-                    }
-                }
-            }
-            else{
-                while (hashes[sketch_start] == 0 && sketch_start < hashlen){
-                    ++sketch_start;
-                }
-                for (int i = sketch_start; i < hashlen; ++i){
-                    mins[sketch_len++] = *(hashes + i);
-                    if (sketch_len == sketch_size){
-                        break;
-                    }
-                }
-            }
-            sketch_start = 0;
-            // so I can get my
-            // classification
-            tuple<string, int, int, bool> result;
-            result = classify_and_count_diff_filter(ref_keys, ref_mins, mins, ref_min_starts, sketch_start, ref_min_lens, sketch_len, sketch_size, min_diff);
-
-            bool depth_filter = sketch_len <= 0; 
-            bool match_filter = std::get<1>(result) < min_matches;
-
-            if (!depth_filter && !match_filter && std::get<3>(result)){
-                outre << ">" << seq->name.s << endl
-                    << seq->seq.s << endl
-                    << "+" << endl
-                    << seq->qual.s << endl;
-            }
-#pragma omp critical
-            {
-                cout << outre.str();
-                outre.str("");
-            }
-            delete [] hashes;
-            delete [] mins;
-
-            // classification
-        }
-        kseq_destroy(seq);
-        gzclose(fp);
         if (streamify_me_capn){
-            //#pragma omp parallel
-            //{
+            #pragma omp parallel
+            {
 #pragma omp single nowait
             {
                 FILE *instream = NULL;
@@ -1611,7 +1533,7 @@ int main_filter(int argc, char** argv){
         if (sketch_size == -1){
             cerr << "Sketch size unset." << endl
                 << "Will use the default sketch size of s = 1000" << endl;
-            sketch_size = 1000;
+            sketch_size = 10000;
         }
 
         if (kmer.size() == 0){
@@ -1672,74 +1594,33 @@ int main_filter(int argc, char** argv){
             exit(1);
         }
 
-
-
-#pragma omp master
-        cerr << " Done." << endl <<
-            ref_keys.size() << " references and " << read_keys.size() << " reads parsed." << endl;
-
+        HASHTCounter* ref_htc = new HASHTCounter(10000000);
         vector<hash_t*> ref_hashes(ref_keys.size());
-        vector<int> ref_hash_nums(ref_keys.size());
+        vector<int> ref_hash_lens(ref_keys.size());
+        int num_refs = ref_seqs.size();
 
+        HASHTCounter* read_htc = new HASHTCounter(10000000);
         vector<hash_t*> read_hashes(read_keys.size());
-        vector<int> read_hash_nums(read_keys.size());
-
-        int numrefs = ref_keys.size();
-        int numreads = read_keys.size();
-        HASHTCounter* htc;
-        // Holds the average depth of all kmers covering a position
-        vector<int*> ref_depths(ref_keys.size());
-        vector<double> ref_avgs(ref_keys.size());
-        
-        if (useHASHTCounter){
-            htc = new HASHTCounter(40000000);
-        }
-
-        std::function<double(int* depth_arr, int start, int window, int size)> avg_arr = [](int* depth_arr, int start, int window, int size){
-            int tot = 0;
-            if (start + window > size){
-                cerr << "ERROR: start + window > size. Array OOB when calculating avg depth." << endl;
-                assert(start + window < size);
-            }
-            for (int i = 0; i < window; ++i){
-                tot += depth_arr[i]; 
-            }
-            return (double) tot / (double) window;
-        };
-
-
+        vector<int> read_hash_lens(read_keys.size());
+        int num_reads = read_seqs.size();     
         #pragma omp parallel
         {
+           #pragma omp for
+            for (int i = 0; i < num_refs; ++i){
+                to_upper(ref_seqs[i], ref_lens[i]);
+                calc_hashes(ref_seqs[i], ref_lens[i], kmer, ref_hashes[i], ref_hash_lens[i], ref_htc);
+            } 
             #pragma omp for
-            for (int i = 0; i < numrefs; ++i){
-                calc_hashes(ref_seqs[i], ref_lens[i], kmer, ref_hashes[i], ref_hash_nums[i]);
-                ref_depths[i] = new int[ref_lens[i]];
-            }
-            #pragma omp for
-            for (int i = 0; i < numreads; ++i){
-                hash_t* h;
-                int num;
-                calc_hashes(read_seqs[i], read_lens[i], kmer, h, num, htc);
-                delete [] h;
-            }
-            for (int i = 0; i < numrefs; ++i){
-                for (int j = 0; j < ref_lens[i]; ++j){
-                   ref_depths[i][j] = htc->get(ref_hashes[i][j]); 
+            for (int i = 0; i < num_reads; ++i){
+                to_upper(read_seqs[i], read_lens[i]);
+                calc_hashes(read_seqs[i], read_lens[i], kmer, read_hashes[i], read_hash_lens[i], read_htc);
+                #pragma omp critical
+                {
+                for (int j = 0; j < read_hash_lens[i]; ++j){
+                    read_hash_to_depth[ read_hashes[i][j]] += 1;
                 }
-                #pragma omp for
-                for (int j = 0; j < ref_lens[i]; ++j){
-                    ref_avgs[i] = avg_arr(ref_depths[i], 0, ref_lens[i], ref_lens[i]);
                 }
             }
-            #pragma omp single
-            {
-                for (int i = 0; i < numrefs; ++i){
-                    for (int j = 0; j < ref_lens[i]; ++j){
-                        
-                    }
-                }
-            }
-
         }
 
 
@@ -1756,7 +1637,8 @@ int main_filter(int argc, char** argv){
         vector<char> g_ret = {'A', 'C', 'T'};
 
 
-        std::function<vector<char>(char)> rotate_snps = [&a_ret, &c_ret, &g_ret, &t_ret](char c){
+        std::function<vector<char>(char)> rotate_snps = [&a_ret, &c_ret, &g_ret, &t_ret](const char& c){
+
             if ( c == 'A' || c == 'a'){
                 return a_ret;
             }
@@ -1888,14 +1770,14 @@ int main_filter(int argc, char** argv){
 
 
 #pragma omp for
-            for (int i = 0; i < ref_keys.size(); i++){
+            for (int i = 0; i < num_refs; i++){
                 // This loop iterates over the reference genomes.
 
                 stringstream outre;
                 //outre << ref_keys[i] << endl;
                 //cout << outre.str(); outre.str("");
 
-                for (int j = 0; j < ref_hash_nums[i]; j++){
+                for (int j = 0; j < ref_hash_lens[i]; j++){
                     // This loop iterates over a single reference genome
                     // i.e. its sequence
 
@@ -2863,6 +2745,8 @@ int main_filter(int argc, char** argv){
             
             cerr << "CLASSIFY COMMAND IS TEMPORARILY UNAVAILABLE: TRY rkmh stream INSTEAD." << endl;
             return -1;
+
+            return main_stream(argc, argv);
 
             vector<char*> ref_files;
             vector<char*> read_files;
