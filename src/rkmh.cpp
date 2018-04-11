@@ -1624,10 +1624,10 @@ int main_filter(int argc, char** argv){
         }
 
 
-        std::function<double(vector<int>)> avg = [](vector<int> n_list){
+        std::function<double(const list<int>&)> avg = [](const list<int>& n_list){
             int ret = 0;
-            for (int x = 0; x < n_list.size(); x++){
-                ret += n_list.at(x);
+            for (auto x : n_list){
+                ret += x;
             }
             return (double) ret / (double) n_list.size();
         };
@@ -1763,14 +1763,15 @@ int main_filter(int argc, char** argv){
         outbuf.reserve(1000);
 
 
-#pragma omp parallel
+//#pragma omp parallel
         {
 
-            list<int> d_window;
 
 
-#pragma omp for
+  //          #pragma omp for
             for (int i = 0; i < num_refs; i++){
+
+                list<int> d_window;
                 // This loop iterates over the reference genomes.
 
                 stringstream outre;
@@ -1788,7 +1789,7 @@ int main_filter(int argc, char** argv){
                         d_window.pop_front();
                     }
 
-                    int avg_d = avg(vector<int>(d_window.begin(), d_window.end()));
+                    int avg_d = floor(avg(d_window));
                     int max_rescue = 0;
 
                     //int max_rescue = 0;
@@ -1821,7 +1822,12 @@ int main_filter(int argc, char** argv){
                                             sstream << ref_keys[i] << "\t" << pos << "\t" <<
                                                 "." << "\t" << orig << "\t" << x;
                                             string s = sstream.str();
-                                            call_count[s] += 1;
+                                            if (call_count.count(s)){
+                                                call_count[s] += 1;
+                                            }
+                                            else{
+                                                call_count[s] = 0;
+                                            }
                                             call_avg_depth[s] = max(avg_d, call_avg_depth[s]);
                                             call_orig_depth[s] = max(call_orig_depth[s], depth);
                                             if (alt_depth > call_max_depth[s]){
@@ -1849,7 +1855,13 @@ int main_filter(int argc, char** argv){
                                 stringstream mod;
                                 char orig = d_alt[alt_pos];
                                 mod << d_alt.substr(0, alt_pos) << d_alt.substr(alt_pos + 1, d_alt.length() - alt_pos);
-                                int alt_depth = read_hash_to_depth[calc_hash(mod.str())];
+                                int alt_depth = 0;
+                                hash_t x_hash;
+                                x_hash = calc_hash(mod.str());
+                                #pragma omp critical
+                                if (read_hash_to_depth.count(x_hash)){
+                                    alt_depth = read_hash_to_depth[x_hash];
+                                }
                                 if (output_vcf && alt_depth > 0.9 * avg_d){
                                     int pos = j + alt_pos + 1;
                                     stringstream sstream;
