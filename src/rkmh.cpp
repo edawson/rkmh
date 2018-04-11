@@ -2744,7 +2744,7 @@ int main_filter(int argc, char** argv){
         int main_classify(int argc, char** argv){
             
             cerr << "CLASSIFY COMMAND IS TEMPORARILY UNAVAILABLE: TRY rkmh stream INSTEAD." << endl;
-            return -1;
+            return main_stream(argc, argv);
 
             return main_stream(argc, argv);
 
