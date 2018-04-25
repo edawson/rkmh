@@ -7,3 +7,6 @@
 [submodule "bash-tap"]
 	path = bash-tap
 	url = https://github.com/illusori/bash-tap
+[submodule "kseq_reader"]
+	path = kseq_reader
+	url = https://github.com/edawson/kseq_reader
