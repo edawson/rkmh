@@ -36,7 +36,7 @@ if __name__ == "__main__":
         for i in range(0, len(lin_toks)):
             t = lin_toks[i].split(":")
             #if (float(t[1]) > match_threshold) and lin_kmer_counts[i] > 4:
-            if lin_kmer_counts[i] > 5:
+            if lin_kmer_counts[i] >= 5:
                 if l_trip:
                     #l_match = ""
                     #sys.stderr.write("Read matches to two or more lineages\n" + tokens[0])

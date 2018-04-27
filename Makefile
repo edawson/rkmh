@@ -9,7 +9,8 @@ ifdef IS_ICPC
 	CXXFLAGS:= -O3 -xHost -std=c++11 -qopenmp
 else
 	CXX:=g++
-	CXXFLAGS:= -O3 -std=c++11 -fopenmp -mtune=native -ggdb -g
+	CXXFLAGS:= -O0 -std=c++11 -fopenmp -ggdb -g
+	#CXXFLAGS:= -O3 -std=c++11 -fopenmp -mtune=native -ggdb -g
 endif
 
 SRC_DIR:=src
