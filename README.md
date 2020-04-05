@@ -6,6 +6,8 @@ June 2016
 
 [![](https://images.microbadger.com/badges/image/erictdawson/rkmh.svg)](https://microbadger.com/images/erictdawson/rkmh "Get your own image badge on microbadger.com")
 
+![C/C++ CI](https://github.com/edawson/rkmh/workflows/C/C++%20CI/badge.svg)
+
 ### What is it
 rkmh performs identification of *individual reads*, identity-based read filtering, and alignment-free variant calling
 using MinHash (as implemented in [Mash](https://github.com/marbl/Mash)). It is compatible with Mash and sourmash via JSON exchange.
