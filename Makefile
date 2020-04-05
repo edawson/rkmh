@@ -26,8 +26,8 @@ $(SRC_DIR)/rkmh.o: $(SRC_DIR)/rkmh.cpp $(SRC_DIR)/equiv.hpp mkmh/libmkmh.a
 kseq_reader/libksr.a: kseq_reader/kseq_reader.cpp kseq_reader/kseq_reader.hpp
 	cd kseq_reader && $(MAKE)
 
-mkmh/libmkmh.a: mkmh/mkmh.cpp mkmh/mkmh.hpp
-	cd mkmh && $(MAKE)
+mkmh/libmkmh.a:
+	cd mkmh && $(MAKE) libmkmh.a
 
 .PHONY: clean clobber lib static
 
