@@ -6,6 +6,8 @@ June 2016
 
 [![](https://images.microbadger.com/badges/image/erictdawson/rkmh.svg)](https://microbadger.com/images/erictdawson/rkmh "Get your own image badge on microbadger.com")
 
+![C/C++ CI](https://github.com/edawson/rkmh/workflows/C/C++%20CI/badge.svg)
+
 ### What is it
 rkmh performs identification of *individual reads*, identity-based read filtering, and alignment-free variant calling
 using MinHash (as implemented in [Mash](https://github.com/marbl/Mash)). It is compatible with Mash and sourmash via JSON exchange.
@@ -27,19 +29,28 @@ The only external dependencies should be zlib and a compiler supporting OpenMP. 
 
 This should build rkmh and its library dependencies (mkmh and murmur3).
 
-### *NEW*: Filter
-Imagine you have a bunch of reads sequenced from a viral infection and you want to select only those that are
-from the virus (i.e. remove host reads).
+### HPV16 sublineage classification
+rkmh was designed to assess HPV16 lineage and sublineage coinfections. There is a special command specifically for identifying
+lineage / sublineage specific kmers and labeling reads with them. The necessary references are also included with rkmh.
 
-Now you can:
+To classify each read by its lineage and sublineage, run the following command from inside the rkmh directory:  
 
-    rkmh filter -f reads.fq -r viral_refs.fa -t 4 -k 20 -s 2000
+```
+./rkmh hpv16 -f <fastqToClassify.fq> > out.rk
+```
 
-You can also pass the `-z` param to stream to accomplish the same thing.
+Prevalence estimates for each lineage/sublineage can then be calculated by running a script that sums
+the number of reads, corrects for common error modes, and outputs a summary of the infecting (sub)lineages
+and their estimated proportions:  
 
+```
+python scripts/score_real_classification.py < out.rk > out.cls
+```
 
+The output file `out.cls` contains a single line describing the estimated (sub)lineages and their proportions. We
+assume a sample is coinfected if we see at least two lineages present at >5% prevalence.
 
-### *NEW*: Stream
+### Stream
 rkmh can now stream reads through, using roughly constant memory.
 This command performs almost identically to `classify` and performs the same read classification task by default:
 
@@ -59,6 +70,17 @@ of `classify`, but if you cannot tolerate collisions we suggest you use the clas
 
 The `-I` flag is implemented the same way as the `-M` flag, and again matches the specificity of classify on small genomes while providing
 a big boost in performance for less memory.
+
+
+### Filter
+Imagine you have a bunch of reads sequenced from a viral infection and you want to select only those that are
+from the virus (i.e. remove host reads).
+
+Now you can:
+
+    rkmh filter -f reads.fq -r viral_refs.fa -t 4 -k 20 -s 2000
+
+You can also pass the `-z` param to stream to accomplish the same thing.
 
 
 ### Classify 
